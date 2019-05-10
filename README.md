@@ -3,7 +3,7 @@ CoinTex is a multi-level adventure game created using the **Kivy** cross-platfor
 
 The game is multi-level. Once it is opened, a main screen appears that shows a matrix of all game levels, which are 24 up to this time. The main screen is given in the next figure. 
 
-https://user-images.githubusercontent.com/16560492/57524758-14b88080-7329-11e9-809a-09d7bb08204b.jpg
+[https://user-images.githubusercontent.com/16560492/57524758-14b88080-7329-11e9-809a-09d7bb08204b.jpg]
 
 There will be only 1 level activated which is level 1. Once level x is completed, the level x+1 will be activated until reaching the last level. Information about the latest level completed is stored in a file named "game_info". This file is created once level 1 is completed. If this file is removed, the game will return back to the initial state in whicih only level 1 is activated. By pressing a level, the user is directed to another screen where the player can start playing the game. The screen of level 1 is
 given below.

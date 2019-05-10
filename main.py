@@ -548,6 +548,6 @@ class Level24(kivy.uix.screenmanager.Screen):
     num_collisions_hit = 0
     num_collisions_level = 30
 
-app = TestApp()
+app = TestApp(title="CoinTex")
 app.run()
 

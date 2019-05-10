@@ -44,7 +44,7 @@ The game is already distributed for end-user to download and run easily for Andr
 For Android, it is available at [Google Play](https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast).
 
 ## For Contacting the Author
-* [E-mail](ahmed.f.gad@gmail.com)
+* [E-mail]<ahmed.f.gad@gmail.com>
 * [LinkedIn](https://linkedin.com/in/ahmedfgad)
 * [Hearbeat](https://heartbeat.fritz.ai/@ahmedfgad)
 * [KDnuggets](https://kdnuggets.com/author/ahmed-gad)

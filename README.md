@@ -1,4 +1,4 @@
-# CoinTex: Cross-platform multi-level game created in Python using Kivy
+# CoinTex: Cross-platform Multi-Level Game created in Python using Kivy
 CoinTex is a multi-level adventure game created using the **Kivy** cross-platform Python framework. The game is successfully tested in Linux, Windows, and Android and working on all of these platforms without even changing a single line of code. Here is a simple description of it.
 
 ## Game Description

@@ -28,6 +28,8 @@ The much time the player collides with a monster or a fire the much reduction in
 
 ![1](https://user-images.githubusercontent.com/16560492/57525269-87762b80-732a-11e9-9e26-999e17322452.jpg)
 
+Note that the game includes some **sound effects**. There is also a background music running while the main screen is open or any level is being played.
+
 ## Running the Project for Devevlopers
 Before running the game, you have to make sure Kivy is installing and running successfully. You can follow the instructions in my tutorial titled **Python for Android: Start Building Kivy Cross-Platform Applications** available in my [LinkedIn profile](https://www.linkedin.com/pulse/python-android-start-building-kivy-cross-platform-applications-gad). You can also find more information about Kivy in chapter 8 of my book cited as **Ahmed Fawzy Gad 'Practical Computer Vision Applications Using Deep Learning with CNNs'. Dec. 2018, Apress, 978-1-4842-4167-7**. It is avalable at [Amazon](https://www.amazon.com/Practical-Computer-Vision-Applications-Learning/dp/1484241665) and [Springer](https://springer.com/us/book/9781484241660).
 After making sure Kivy is running, just use the next terminal command to run the main file of the game **main.py**:

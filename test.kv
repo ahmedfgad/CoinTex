@@ -47,7 +47,7 @@ ScreenManager:
             text: "CoinTex version 1.2 is developed by Ahmed Fawzy Gad who is interested in machine learning, deep learning, computer vision, and Python. The game is completely developed in Python using the Kivy cross-platform framework.\n\nFeel free to contact me for any questions or recommendations:\nE-mail: ahmed.f.gad@gmail.com\nFacebook: https://www.facebook.com/ahmed.f.gadd\nLinkedIn: https://www.linkedin.com/in/ahmedfgad\nTowardsDataScience: https://towardsdatascience.com/@ahmedfgad \nResearchGate: https://www.researchgate.net/profile/Ahmed_Gad13"
         ImageButton:
             size_hint_y: 0.1
-            source: "other-images/Main-Screen.png"
+            source: "images/other-images/Main-Screen.png"
             on_release: app.root.current="main"
 
 <AllLevelsCompleted>:
@@ -60,13 +60,13 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "bg_cointex.png"
+                source: "images/bg_cointex.png"
         Image:
             size_hint_y: 0.9
-            source: "other-images/Congratulations-Passed.png"
+            source: "images/other-images/Congratulations-Passed.png"
         ImageButton:
             size_hint_y: 0.1
-            source: "other-images/Main-Screen.png"
+            source: "images/other-images/Main-Screen.png"
             on_release: app.root.current="main"
 
 <MainScreen>:
@@ -78,7 +78,7 @@ ScreenManager:
         BoxLayout:
             size_hint_y: 0.08
             ImageButton:
-                source: "./other-images/About-Us.png"
+                source: "./images/other-images/About-Us.png"
                 on_release: app.root.current="aboutus"
         GridLayout:
             id: lvls_imagebuttons
@@ -89,78 +89,78 @@ ScreenManager:
                 Rectangle:
                     pos: self.pos
                     size: self.size
-                    source: "bg_cointex.png"
+                    source: "images/bg_cointex.png"
             ImageButton:
-                source: "levels-images/1.png"
+                source: "images/levels-images/1.png"
                 on_release: app.root.current="level1"
             ImageButton:
-                source: "levels-images/2.png"
+                source: "images/levels-images/2.png"
                 on_release: app.root.current="level2"
             ImageButton:
-                source: "levels-images/3.png"
+                source: "images/levels-images/3.png"
                 on_release: app.root.current="level3"
             ImageButton:
-                source: "levels-images/4.png"
+                source: "images/levels-images/4.png"
                 on_release: app.root.current="level4"
             ImageButton:
-                source: "levels-images/5.png"
+                source: "images/levels-images/5.png"
                 on_release: app.root.current="level5"
             ImageButton:
-                source: "levels-images/6.png"
+                source: "images/levels-images/6.png"
                 on_release: app.root.current="level6"
             ImageButton:
-                source: "levels-images/7.png"
+                source: "images/levels-images/7.png"
                 on_release: app.root.current="level7"
             ImageButton:
-                source: "levels-images/8.png"
+                source: "images/levels-images/8.png"
                 on_release: app.root.current="level8"
             ImageButton:
-                source: "levels-images/9.png"
+                source: "images/levels-images/9.png"
                 on_release: app.root.current="level9"
             ImageButton:
-                source: "levels-images/10.png"
+                source: "images/levels-images/10.png"
                 on_release: app.root.current="level10"
             ImageButton:
-                source: "levels-images/11.png"
+                source: "images/levels-images/11.png"
                 on_release: app.root.current="level11"
             ImageButton:
-                source: "levels-images/12.png"
+                source: "images/levels-images/12.png"
                 on_release: app.root.current="level12"
             ImageButton:
-                source: "levels-images/13.png"
+                source: "images/levels-images/13.png"
                 on_release: app.root.current="level13"
             ImageButton:
-                source: "levels-images/14.png"
+                source: "images/levels-images/14.png"
                 on_release: app.root.current="level14"
             ImageButton:
-                source: "levels-images/15.png"
+                source: "images/levels-images/15.png"
                 on_release: app.root.current="level15"
             ImageButton:
-                source: "levels-images/16.png"
+                source: "images/levels-images/16.png"
                 on_release: app.root.current="level16"
             ImageButton:
-                source: "levels-images/17.png"
+                source: "images/levels-images/17.png"
                 on_release: app.root.current="level17"
             ImageButton:
-                source: "levels-images/18.png"
+                source: "images/levels-images/18.png"
                 on_release: app.root.current="level18"
             ImageButton:
-                source: "levels-images/19.png"
+                source: "images/levels-images/19.png"
                 on_release: app.root.current="level19"
             ImageButton:
-                source: "levels-images/20.png"
+                source: "images/levels-images/20.png"
                 on_release: app.root.current="level20"
             ImageButton:
-                source: "levels-images/21.png"
+                source: "images/levels-images/21.png"
                 on_release: app.root.current="level21"
             ImageButton:
-                source: "levels-images/22.png"
+                source: "images/levels-images/22.png"
                 on_release: app.root.current="level22"
             ImageButton:
-                source: "levels-images/23.png"
+                source: "images/levels-images/23.png"
                 on_release: app.root.current="level23"
             ImageButton:
-                source: "levels-images/24.png"
+                source: "images/levels-images/24.png"
                 on_release: app.root.current="level24"
 
 <Level1>:
@@ -175,7 +175,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl1.jpg"
+                source: "images/levels-bg/bg_lvl1.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl1
         LevelNumber
@@ -201,7 +201,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl2.jpg"
+                source: "images/levels-bg/bg_lvl2.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl2
         LevelNumber
@@ -227,7 +227,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl3.jpg"
+                source: "images/levels-bg/bg_lvl3.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl3
         LevelNumber
@@ -253,7 +253,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl4.jpg"
+                source: "images/levels-bg/bg_lvl4.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl4
         LevelNumber
@@ -284,7 +284,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl5.jpg"
+                source: "images/levels-bg/bg_lvl5.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl5
         LevelNumber
@@ -320,7 +320,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl6.jpg"
+                source: "images/levels-bg/bg_lvl6.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl6
         LevelNumber
@@ -361,7 +361,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl7.jpg"
+                source: "images/levels-bg/bg_lvl7.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl7
         LevelNumber
@@ -395,7 +395,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl8.jpg"
+                source: "images/levels-bg/bg_lvl8.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl8
         LevelNumber
@@ -425,7 +425,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl9.jpg"
+                source: "images/levels-bg/bg_lvl9.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl9
         LevelNumber
@@ -455,7 +455,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl10.jpg"
+                source: "images/levels-bg/bg_lvl10.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl10
         LevelNumber
@@ -489,7 +489,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl11.jpg"
+                source: "images/levels-bg/bg_lvl11.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl11
         LevelNumber
@@ -524,7 +524,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl12.jpg"
+                source: "images/levels-bg/bg_lvl12.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl12
         LevelNumber
@@ -559,7 +559,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl13.jpg"
+                source: "images/levels-bg/bg_lvl13.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl13
         LevelNumber
@@ -599,7 +599,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl14.jpg"
+                source: "images/levels-bg/bg_lvl14.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl14
         LevelNumber
@@ -651,7 +651,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl15.jpg"
+                source: "images/levels-bg/bg_lvl15.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl15
         LevelNumber
@@ -696,7 +696,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl16.jpg"
+                source: "images/levels-bg/bg_lvl16.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl16
         LevelNumber
@@ -740,7 +740,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl17.jpg"
+                source: "images/levels-bg/bg_lvl17.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl17
         LevelNumber
@@ -782,7 +782,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl18.jpg"
+                source: "images/levels-bg/bg_lvl18.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl18
         LevelNumber
@@ -836,7 +836,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl19.jpg"
+                source: "images/levels-bg/bg_lvl19.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl19
         LevelNumber
@@ -888,7 +888,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl20.jpg"
+                source: "images/levels-bg/bg_lvl20.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl20
         LevelNumber
@@ -950,7 +950,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl1.jpg"
+                source: "images/levels-bg/bg_lvl1.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl21
         LevelNumber
@@ -1000,7 +1000,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl2.jpg"
+                source: "images/levels-bg/bg_lvl2.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl22
         LevelNumber
@@ -1050,7 +1050,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl3.jpg"
+                source: "images/levels-bg/bg_lvl3.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl23
         LevelNumber
@@ -1090,7 +1090,7 @@ ScreenManager:
             Rectangle:
                 pos: self.pos
                 size: self.size
-                source: "levels-bg/bg_lvl4.jpg"
+                source: "images/levels-bg/bg_lvl4.jpg"
         NumCollectedCoins:
             id: num_coins_collected_lvl24
         LevelNumber
@@ -1149,7 +1149,7 @@ ScreenManager:
 <Monster@Image>:
     size_hint: (0.15, 0.15)
     pos_hint: {'x': 0.8, 'y': 0.8}
-    source: "10.png"
+    source: "images/10.png"
     im_num: 10
     start_im_num: 10
     end_im_num: 17
@@ -1160,7 +1160,7 @@ ScreenManager:
 <Monster2@Image>:
     size_hint: (0.15, 0.15)
     pos_hint: {'x': 0.8, 'y': 0.8}
-    source: "21.png"
+    source: "images/21.png"
     im_num: 21
     start_im_num: 21
     end_im_num: 29
@@ -1171,7 +1171,7 @@ ScreenManager:
 <Character@Image>:
     size_hint: (0.15, 0.15)
     pos_hint: {'x': 0.0, 'y': 0.0}
-    source: "0.png"
+    source: "images/0.png"
     im_num: 0
     start_im_num: 0
     end_im_num: 7

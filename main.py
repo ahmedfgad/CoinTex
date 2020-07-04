@@ -8,7 +8,7 @@ import functools
 import kivy.uix.behaviors
 import pickle
 
-class TestApp(kivy.app.App):
+class CointexApp(kivy.app.App):
 
     def on_start(self):
         music_dir = os.getcwd()+"/music/"
@@ -80,7 +80,7 @@ class TestApp(kivy.app.App):
         for k in range(curr_screen.num_coins):
             x = random.uniform(section_width*k, section_width*(k+1)-coin_width)
             y = random.uniform(0, 1-coin_height)
-            coin = kivy.uix.image.Image(source="coin.png", size_hint=(coin_width, coin_height), pos_hint={'x': x, 'y': y}, allow_stretch=True)
+            coin = kivy.uix.image.Image(source="other-images/coin.png", size_hint=(coin_width, coin_height), pos_hint={'x': x, 'y': y}, allow_stretch=True)
             curr_screen.ids['layout_lvl'+str(screen_num)].add_widget(coin, index=-1)
             curr_screen.coins_ids['coin'+str(k)] = coin
 
@@ -152,7 +152,7 @@ class TestApp(kivy.app.App):
                 kivy.clock.Clock.schedule_once(functools.partial(self.back_to_main_screen, curr_screen.parent), 3)
 
     def change_monst_im(self, monster_image):
-        monster_image.source = str(int(monster_image.im_num)) + ".png"
+        monster_image.source = "monsters-images/" + str(int(monster_image.im_num)) + ".png"
 
     def touch_down_handler(self, screen_num, args):
         curr_screen = self.root.screens[screen_num]
@@ -161,6 +161,9 @@ class TestApp(kivy.app.App):
 
     def start_char_animation(self, screen_num, touch_pos):
         curr_screen = self.root.screens[screen_num]
+        if curr_screen.character_killed:
+            return
+
         character_image = curr_screen.ids['character_image_lvl'+str(screen_num)]
         character_image.im_num = character_image.start_im_num
         char_anim = kivy.animation.Animation(pos_hint={'x': touch_pos[0] - character_image.size_hint[0] / 2,'y': touch_pos[1] - character_image.size_hint[1] / 2}, im_num=character_image.end_im_num, duration=curr_screen.char_anim_duration)
@@ -210,7 +213,7 @@ class TestApp(kivy.app.App):
                 del curr_screen.coins_ids[coin_key]
 
     def change_char_im(self, character_image):
-        character_image.source = str(int(character_image.im_num)) + ".png"
+        character_image.source = "character-images/" + str(int(character_image.im_num)) + ".png"
 
     def start_fire_animation(self, fire_widget, pos, anim_duration):
         fire_anim = kivy.animation.Animation(pos_hint=fire_widget.fire_start_pos_hint, duration=fire_widget.fire_anim_duration)+kivy.animation.Animation(pos_hint=fire_widget.fire_end_pos_hint, duration=fire_widget.fire_anim_duration)
@@ -493,17 +496,6 @@ class Level20(kivy.uix.screenmanager.Screen):
     num_collisions_hit = 0
     num_collisions_level = 30
 
-class Level20(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.1
-    num_monsters = 2
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
 class Level21(kivy.uix.screenmanager.Screen):
     character_killed = False
     num_coins = 18
@@ -548,6 +540,7 @@ class Level24(kivy.uix.screenmanager.Screen):
     num_collisions_hit = 0
     num_collisions_level = 30
 
-app = TestApp(title="CoinTex")
+app = CointexApp()
+app.title = "CoinTex"
+app.icon = 'cointex_logo.png'
 app.run()
-

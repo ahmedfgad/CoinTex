@@ -46,16 +46,18 @@ This tutorial titled [Python for Android: Start Building Kivy Cross-Platform App
 
 ## Book: [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303)
 
-To get started with Kivy app development and how to built Android apps out of the Kivy app, check the book titled [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303)
+To get started with Kivy app development and how to built Android apps out of the Kivy app, check the book titled [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303). This book documents the CoinTex game from A to Z in chapters 5 and 6.
 
 [![kivy-book](https://user-images.githubusercontent.com/16560492/86205093-575e9d00-bb69-11ea-82f7-23fef487ce3c.jpg)](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303)
 
 After making sure Kivy is running, just use the next terminal command to run the main file of the game **main.py**. The game is developed in Python 3 and so the terminal command **python3** is used for Linux/Mac.
+
 `ahmed-gad@ubuntu:~/Desktop/CoinTex$ python3 main.py`
 
 For Android, the APK file is built using Buildozer and this is why the **buildozer.spec** file exists in the project. Just use this terminal command for exporting the APK file. 
 
 After it runs successfully, the APK file will be exported. For more information about installing Buildozer, generating, and locating the APK file, you can read the tutorial and [chapter 8 of the book mentioned above](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303).
+
 `ahmed-gad@ubuntu:~/Desktop/CoinTex$ buildozer android release deploy run`
 
 # Running the Game for End Users
@@ -63,6 +65,12 @@ After it runs successfully, the APK file will be exported. For more information 
 The game is already distributed for end-user to download and run easily for Android and Linux. For Linux, it is available at [this link](https://www.linux-apps.com/p/1279788). 
 
 For Android, it is available at [Google Play](https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast).
+
+# Game Documentation
+
+The CoinTex game is 100% documented in chapters 5 and 6 of the book titled [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303). It starts from a hello world app until building CoinTex.
+
+[![kivy-book](https://user-images.githubusercontent.com/16560492/86205093-575e9d00-bb69-11ea-82f7-23fef487ce3c.jpg)](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303)
 
 # For Contacting the Author
 

@@ -21,10 +21,9 @@ class CointexApp(kivy.app.App):
 
     def read_game_info(self):
         try:
-            game_info_file = open("game_info",'rb')
-            game_info = pickle.load(game_info_file)
-            return game_info[0]['lastlvl'], game_info[0]['congrats_displayed_once']
-            game_info_file.close()
+            with open("game_info",'rb') as game_info_file:
+                game_info = pickle.load(game_info_file)
+                return game_info[0]['lastlvl'], game_info[0]['congrats_displayed_once']
         except:
             print("CoinTex FileNotFoundError: Game info file is not found. Game starts from level 1.")
             return 1, False

@@ -7,6 +7,96 @@ import os
 import functools
 import kivy.uix.behaviors
 import pickle
+import pygad
+import threading
+import kivy.base
+
+class CollectCoinThread(threading.Thread):
+
+    def __init__(self, screen):
+        super().__init__()
+        self.screen = screen
+
+    def run(self):
+        ga_instance = pygad.GA(num_generations=9999,
+                               num_parents_mating=300, 
+                               fitness_func=fitness_func,
+                               sol_per_pop=1000, 
+                               num_genes=2,
+                               init_range_low=0.0,
+                               init_range_high=1.0,
+                               random_mutation_min_val=0.0,
+                               random_mutation_max_val=1.0,
+                               mutation_by_replacement=True,
+                               callback_generation=callback_generation,
+                               delay_after_gen=self.screen.char_anim_duration)
+        ga_instance.run()
+
+def fitness_func(solution, solution_idx):
+    curr_screen = app.root.screens[lvl_num]
+
+    coins = curr_screen.coins_ids
+    if len(coins.items()) == 0:
+        return 0
+
+    curr_coin = coins[list(coins.keys())[0]]
+
+    curr_coin_center = [curr_coin.pos_hint['x'], curr_coin.pos_hint['y']]
+
+    output = abs(solution[0] - curr_coin_center[0]) + abs(solution[1] - curr_coin_center[1])
+    output = 1.0 / output
+
+    monsters_pos = []
+    for i in range(curr_screen.num_monsters):
+        monster_image = curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(lvl_num)]
+        monsters_pos.append([monster_image.pos_hint['x'], monster_image.pos_hint['y']])
+
+    for monst_pos in monsters_pos:
+        char_monst_h_distance = abs(solution[0] - monst_pos[0])
+        char_monst_v_distance = abs(solution[1] - monst_pos[1])
+        if char_monst_h_distance <= 0.3 and char_monst_v_distance <= 0.3:
+            output -= 300
+        else:
+            output += 100
+
+    fires_pos = []
+    for i in range(curr_screen.num_fires):
+        fire_image = curr_screen.ids['fire'+str(i+1)+'_lvl'+str(lvl_num)]
+        fires_pos.append([fire_image.pos_hint['x'], fire_image.pos_hint['y']])
+
+    for fire_pos in fires_pos:
+        char_fire_h_distance = abs(solution[0] - fire_pos[0])
+        char_fire_v_distance = abs(solution[1] - fire_pos[1])
+        if char_fire_h_distance <= 0.3 and char_fire_v_distance <= 0.3:
+            output -= 300
+        else:
+            output += 100
+
+    fitness = output
+    return fitness
+
+last_fitness = 0
+def callback_generation(ga_instance):
+    global last_fitness
+    
+    best_sol_fitness = ga_instance.best_solution()[1]
+    fitness_change = best_sol_fitness - last_fitness
+    curr_screen = app.root.screens[lvl_num]
+
+    last_fitness = best_sol_fitness
+
+    coins = curr_screen.coins_ids
+
+    if len(coins.items()) == 0 or curr_screen.character_killed:
+        # After either the level is completed or the character is killed, then stop the GA by returning the string "stop".
+        return "stop"
+    elif len(coins.items()) != 0 and fitness_change != 0:
+        best_sol = ga_instance.best_solution()[0]
+        app.start_char_animation(lvl_num, [float(best_sol[0]),  float(best_sol[1])])
+
+#    print("Generation  = {generation}".format(generation=ga_instance.generations_completed))
+#    print("Fitness     = {fitness}".format(fitness=ga_instance.best_solution()[1]))
+#    print("Change     = {change}".format(change=fitness_change))
 
 class CointexApp(kivy.app.App):
 
@@ -20,13 +110,7 @@ class CointexApp(kivy.app.App):
         self.activate_levels(next_level_num, congrats_displayed_once)
 
     def read_game_info(self):
-        try:
-            with open("game_info",'rb') as game_info_file:
-                game_info = pickle.load(game_info_file)
-                return game_info[0]['lastlvl'], game_info[0]['congrats_displayed_once']
-        except:
-            print("CoinTex FileNotFoundError: Game info file is not found. Game starts from level 1.")
-            return 1, False
+        return 24, True
 
     def activate_levels(self, next_level_num, congrats_displayed_once):
         num_levels = len(self.root.screens[0].ids['lvls_imagebuttons'].children)
@@ -104,8 +188,15 @@ class CointexApp(kivy.app.App):
             fire_widget = curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)]
             self.start_fire_animation(fire_widget=fire_widget, pos=(0.0, 0.5), anim_duration=5.0)
 
+        global lvl_num
+
+        lvl_num = screen_num
+
+        collectCoinThread = CollectCoinThread(screen=curr_screen)
+        collectCoinThread.start()
+
     def start_monst_animation(self, monster_image, new_pos, anim_duration):
-        monst_anim = kivy.animation.Animation(pos_hint={'x': new_pos[0], 'y': new_pos[1]}, im_num=monster_image.end_im_num,duration=anim_duration)
+        monst_anim = kivy.animation.Animation(pos_hint={'x': new_pos[0], 'y': new_pos[1]}, im_num=monster_image.end_im_num, duration=anim_duration)
         monst_anim.bind(on_complete=self.monst_animation_completed)
         monst_anim.start(monster_image)
 
@@ -280,7 +371,7 @@ class Level1(kivy.uix.screenmanager.Screen):
     num_coins = 5
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.0
+    char_anim_duration = 0.25
     num_monsters = 1
     num_fires = 0
     num_collisions_hit = 0
@@ -291,7 +382,7 @@ class Level2(kivy.uix.screenmanager.Screen):
     num_coins = 8
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.1
+    char_anim_duration = 0.25
     num_monsters = 1
     num_fires = 0
     num_collisions_hit = 0
@@ -302,7 +393,7 @@ class Level3(kivy.uix.screenmanager.Screen):
     num_coins = 12
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.2
+    char_anim_duration = 0.25
     num_monsters = 1
     num_fires = 0
     num_collisions_hit = 0
@@ -313,7 +404,7 @@ class Level4(kivy.uix.screenmanager.Screen):
     num_coins = 10
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.2
+    char_anim_duration = 0.25
     num_monsters = 1
     num_fires = 1
     num_collisions_hit = 0
@@ -324,7 +415,7 @@ class Level5(kivy.uix.screenmanager.Screen):
     num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.3
+    char_anim_duration = 0.25
     num_monsters = 1
     num_fires = 2
     num_collisions_hit = 0
@@ -335,7 +426,7 @@ class Level6(kivy.uix.screenmanager.Screen):
     num_coins = 12
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.3
+    char_anim_duration = 0.25
     num_monsters = 1
     num_fires = 3
     num_collisions_hit = 0
@@ -346,7 +437,7 @@ class Level7(kivy.uix.screenmanager.Screen):
     num_coins = 10
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.4
+    char_anim_duration = 0.25
     num_monsters = 3
     num_fires = 0
     num_collisions_hit = 0
@@ -357,7 +448,7 @@ class Level8(kivy.uix.screenmanager.Screen):
     num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.4
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 0
     num_collisions_hit = 0
@@ -368,7 +459,7 @@ class Level9(kivy.uix.screenmanager.Screen):
     num_coins = 12
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.5
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 0
     num_collisions_hit = 0
@@ -379,7 +470,7 @@ class Level10(kivy.uix.screenmanager.Screen):
     num_coins = 14
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.5
+    char_anim_duration = 0.25
     num_monsters = 3
     num_fires = 0
     num_collisions_hit = 0
@@ -390,7 +481,7 @@ class Level11(kivy.uix.screenmanager.Screen):
     num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.6
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 1
     num_collisions_hit = 0
@@ -401,7 +492,7 @@ class Level12(kivy.uix.screenmanager.Screen):
     num_coins = 12
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.6
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 1
     num_collisions_hit = 0
@@ -412,7 +503,7 @@ class Level13(kivy.uix.screenmanager.Screen):
     num_coins = 10
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.7
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 2
     num_collisions_hit = 0
@@ -423,7 +514,7 @@ class Level14(kivy.uix.screenmanager.Screen):
     num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.7
+    char_anim_duration = 0.25
     num_monsters = 0
     num_fires = 6
     num_collisions_hit = 0
@@ -434,7 +525,7 @@ class Level15(kivy.uix.screenmanager.Screen):
     num_coins = 16
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.8
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 3
     num_collisions_hit = 0
@@ -445,7 +536,7 @@ class Level16(kivy.uix.screenmanager.Screen):
     num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.8
+    char_anim_duration = 0.25
     num_monsters = 3
     num_fires = 2
     num_collisions_hit = 0
@@ -456,7 +547,7 @@ class Level17(kivy.uix.screenmanager.Screen):
     num_coins = 10
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.3
+    char_anim_duration = 0.25
     num_monsters = 0
     num_fires = 4
     num_collisions_hit = 0
@@ -467,7 +558,7 @@ class Level18(kivy.uix.screenmanager.Screen):
     num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.5
+    char_anim_duration = 0.25
     num_monsters = 3
     num_fires = 4
     num_collisions_hit = 0
@@ -478,7 +569,7 @@ class Level19(kivy.uix.screenmanager.Screen):
     num_coins = 12
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.2
+    char_anim_duration = 0.25
     num_monsters = 0
     num_fires = 6
     num_collisions_hit = 0
@@ -489,7 +580,7 @@ class Level20(kivy.uix.screenmanager.Screen):
     num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.1
+    char_anim_duration = 0.25
     num_monsters = 0
     num_fires = 8
     num_collisions_hit = 0
@@ -500,7 +591,7 @@ class Level21(kivy.uix.screenmanager.Screen):
     num_coins = 18
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.3
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 4
     num_collisions_hit = 0
@@ -511,7 +602,7 @@ class Level22(kivy.uix.screenmanager.Screen):
     num_coins = 20
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.3
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 4
     num_collisions_hit = 0
@@ -522,7 +613,7 @@ class Level23(kivy.uix.screenmanager.Screen):
     num_coins = 25
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.1
+    char_anim_duration = 0.25
     num_monsters = 2
     num_fires = 2
     num_collisions_hit = 0
@@ -533,7 +624,7 @@ class Level24(kivy.uix.screenmanager.Screen):
     num_coins = 20
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 1.1
+    char_anim_duration = 0.25
     num_monsters = 3
     num_fires = 2
     num_collisions_hit = 0

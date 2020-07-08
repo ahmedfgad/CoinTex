@@ -5,7 +5,7 @@ The source code of CoinTex is available at the root of the [CoinTex GitHub proje
 
 https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast&hl=en
 
-The agent is created using the genetic algorithm (GA). The [PyGAD](https://pygad.readthedocs.io) library is used to build the GA. 
+The only AI used to build the agent is the genetic algorithm (GA). There is no machine/deep learning model used. The [PyGAD](https://pygad.readthedocs.io) library is used to build the GA. 
 
 # Installing PyGAD
 
@@ -62,7 +62,31 @@ After the main screen of the app appears, select any of the activated levels and
 
 # For More Information
 
-The game is developed in Kivy. To get started with Kivy, check the following resources:
+The game is developed in Kivy and the agent is created using the genetic algorithm. To get started with Kivy, check the following resources:
+
+## Tutorial: [Introduction to Optimization with Genetic Algorithm](https://towardsdatascience.com/introduction-to-optimization-with-genetic-algorithm-2f5001d9964b)
+
+A brief introduction about evolutionary algorithms (EAs) and describes the genetic algorithm (GA) which is one of the simplest random-based EAs.
+
+[![intro-genetic](https://miro.medium.com/max/700/1*l82SVTj3yaMEDI0YbRiqUw.jpeg)](https://towardsdatascience.com/introduction-to-optimization-with-genetic-algorithm-2f5001d9964b)
+
+## Tutorial: [5 Genetic Algorithm Applications Using PyGAD](https://blog.paperspace.com/genetic-algorithm-applications-using-pygad)
+
+This tutorial introduces PyGAD, an open-source Python library for implementing the genetic algorithm and training machine learning algorithms and how to use PyGAD to build 5 genetic algorithm applications.
+
+[![pygad-apps](https://blog.paperspace.com/content/images/size/w2000/2020/06/national-cancer-institute-J28Nn-CDbII-unsplash.jpg)](https://blog.paperspace.com/genetic-algorithm-applications-using-pygad)
+
+## Tutorial: [Genetic Algorithm Implementation in Python](https://towardsdatascience.com/genetic-algorithm-implementation-in-python-5ab67bb124a6)
+
+Implementing the genetic algorithm in Python based on a simple example in which we are trying to maximize the output of an equation. 
+
+[![ga-python](https://miro.medium.com/max/700/1*Ak-j8GUP4FwzzR-YPjxclg.png)](https://towardsdatascience.com/genetic-algorithm-implementation-in-python-5ab67bb124a6)
+
+## Book: [Practical Computer Vision Applications Using Deep Learning with CNNs](https://www.amazon.com/Practical-Computer-Vision-Applications-Learning/dp/1484241665)
+
+Besides being a beginner's guide to deep learning for computer vision, the book titled [Practical Computer Vision Applications Using Deep Learning with CNNs](https://www.amazon.com/Practical-Computer-Vision-Applications-Learning/dp/1484241665) discusses how the genetic algorithm work in addition to building implementation in Python using NumPy. The book also discusses the non-dominated sorting genetic algorithm.
+
+[![gad-book-2018](https://user-images.githubusercontent.com/16560492/78830077-ae7c2800-79e7-11ea-980b-53b6bd879eeb.jpg)](https://www.amazon.com/Practical-Computer-Vision-Applications-Learning/dp/1484241665)
 
 ## Tutorial: [Python for Android: Start Building Kivy Cross-Platform Applications](https://www.linkedin.com/pulse/python-android-start-building-kivy-cross-platform-applications-gad)
 

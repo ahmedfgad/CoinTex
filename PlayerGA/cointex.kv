@@ -881,8 +881,6 @@ ScreenManager:
     on_pre_enter: app.screen_on_pre_enter(20)
     on_pre_leave: app.screen_on_pre_leave(20)
     on_enter: app.screen_on_enter(20)
-    Button:
-        text: "Hello"
     FloatLayout:
         id: layout_lvl20
         on_touch_down: app.touch_down_handler(20, args)
@@ -1062,11 +1060,11 @@ ScreenManager:
         Fire:
             id: fire1_lvl23
             fire_start_pos_hint: {'x': -1.5, 'y': 0.3}
-            fire_end_pos_hint: {'x': -0.5, 'y': 0.3}
+            fire_end_pos_hint: {'x': 1.0, 'y': 0.3}
             fire_anim_duration: 1.8
         Fire:
             id: fire2_lvl23
-            fire_start_pos_hint: {'x': -1.5, 'y': 0.8}
+            fire_start_pos_hint: {'x': 1.5, 'y': 0.8}
             fire_end_pos_hint: {'x': -0.5, 'y': 0.8}
             fire_anim_duration: 2.0
         Monster:

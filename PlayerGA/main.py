@@ -32,11 +32,8 @@ class CollectCoinThread(threading.Thread):
                                delay_after_gen=self.screen.char_anim_duration)
         ga_instance.run()
 
-app_ref = None
-lvl_num = 0
-
 def fitness_func(solution, solution_idx):
-    curr_screen = app_ref.root.screens[lvl_num]
+    curr_screen = app.root.screens[lvl_num]
 
     coins = curr_screen.coins_ids
     if len(coins.items()) == 0:
@@ -82,8 +79,11 @@ last_fitness = 0
 def callback_generation(ga_instance):
     global last_fitness
     
-    fitness_change = ga_instance.best_solution()[1] - last_fitness
-    curr_screen = app_ref.root.screens[lvl_num]
+    best_sol_fitness = ga_instance.best_solution()[1]
+    fitness_change = best_sol_fitness - last_fitness
+    curr_screen = app.root.screens[lvl_num]
+
+    last_fitness = best_sol_fitness
 
     coins = curr_screen.coins_ids
 
@@ -92,7 +92,7 @@ def callback_generation(ga_instance):
         return "stop"
     elif len(coins.items()) != 0 and fitness_change != 0:
         best_sol = ga_instance.best_solution()[0]
-        app_ref.start_char_animation(lvl_num, [float(best_sol[0]),  float(best_sol[1])])
+        app.start_char_animation(lvl_num, [float(best_sol[0]),  float(best_sol[1])])
 
 #    print("Generation  = {generation}".format(generation=ga_instance.generations_completed))
 #    print("Fitness     = {fitness}".format(fitness=ga_instance.best_solution()[1]))
@@ -188,8 +188,7 @@ class CointexApp(kivy.app.App):
             fire_widget = curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)]
             self.start_fire_animation(fire_widget=fire_widget, pos=(0.0, 0.5), anim_duration=5.0)
 
-        global app_ref, lvl_num
-        app_ref = self
+        global lvl_num
 
         lvl_num = screen_num
 

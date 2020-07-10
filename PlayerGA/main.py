@@ -368,7 +368,7 @@ class AllLevelsCompleted(kivy.uix.screenmanager.Screen):
 
 class Level1(kivy.uix.screenmanager.Screen):
     character_killed = False
-    num_coins = 5
+    num_coins = 20
     num_coins_collected = 0
     coins_ids = {}
     char_anim_duration = 0.25
@@ -544,7 +544,7 @@ class Level16(kivy.uix.screenmanager.Screen):
 
 class Level17(kivy.uix.screenmanager.Screen):
     character_killed = False
-    num_coins = 10
+    num_coins = 15
     num_coins_collected = 0
     coins_ids = {}
     char_anim_duration = 0.25
@@ -566,7 +566,7 @@ class Level18(kivy.uix.screenmanager.Screen):
 
 class Level19(kivy.uix.screenmanager.Screen):
     character_killed = False
-    num_coins = 12
+    num_coins = 20
     num_coins_collected = 0
     coins_ids = {}
     char_anim_duration = 0.25
@@ -577,12 +577,12 @@ class Level19(kivy.uix.screenmanager.Screen):
 
 class Level20(kivy.uix.screenmanager.Screen):
     character_killed = False
-    num_coins = 15
+    num_coins = 20
     num_coins_collected = 0
     coins_ids = {}
     char_anim_duration = 0.25
     num_monsters = 0
-    num_fires = 8
+    num_fires = 10
     num_collisions_hit = 0
     num_collisions_level = 30
 
@@ -602,8 +602,8 @@ class Level22(kivy.uix.screenmanager.Screen):
     num_coins = 20
     num_coins_collected = 0
     coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
+    char_anim_duration = 0.15
+    num_monsters = 4
     num_fires = 4
     num_collisions_hit = 0
     num_collisions_level = 30

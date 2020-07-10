@@ -60,9 +60,7 @@ After the main screen of the app appears, select any of the activated levels and
 
 ![2020-07-05_19-59-17](https://user-images.githubusercontent.com/16560492/86600094-dad02200-bf9f-11ea-9513-5b57739b0f58.gif)
 
-This is a video showing how the agent is able to pass multiple levels in CoinTex with varying complexity.
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/Sp_0RGjaL-0" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+This is a video showing how the agent is able to pass multiple levels in CoinTex with varying complexity: https://www.youtube.com/embed/Sp_0RGjaL-0
 
 # For More Information
 

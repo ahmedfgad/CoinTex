@@ -1,0 +1,4 @@
+# Packages for running the genetic algorithm version under PlayerGA.
+-r requirements.txt
+pygad
+numpy

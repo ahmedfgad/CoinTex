@@ -1,0 +1,4 @@
+# Kivy is the only package needed to run the game.
+# Version 2.3 or later works with Python 3.12. The [base] extra installs the
+# SDL2 packages so audio plays on the desktop.
+kivy[base]>=2.3.0

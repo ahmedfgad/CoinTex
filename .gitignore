@@ -1,0 +1,34 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Buildozer / python-for-android
+.buildozer/
+bin/
+*.apk
+*.aab
+
+# kivy-ios
+.ios-venv/
+CoinTex-ios/
+
+# Signing files, keep these private
+*.keystore
+*.jks
+*.pem
+*.p12
+.env
+
+# Game save file
+game_info
+
+# OS and editor files
+.DS_Store
+*.swp

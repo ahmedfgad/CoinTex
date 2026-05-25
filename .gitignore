@@ -25,6 +25,7 @@ CoinTex-ios/
 *.pem
 *.p12
 .env
+keystore-backup-note.txt
 
 # Game save file
 game_info

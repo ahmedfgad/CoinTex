@@ -73,6 +73,18 @@ def get_public_ip(timeout=4.0):
     return None
 
 
+def local_subnet_prefix():
+    # The first three parts of this device's local IP, with a trailing dot, for
+    # example "192.168.1.". It is a handy starting point on the Join screen,
+    # because the host is usually on the same network, so the joiner only types
+    # the last number. Returns "" when there is no useful local address.
+    ip = get_local_ip()
+    parts = ip.split(".")
+    if len(parts) == 4 and parts[0] != "127":
+        return ".".join(parts[:3]) + "."
+    return ""
+
+
 def _recv_loop(sock, inbox, on_closed):
     # Read framed JSON messages from sock and put each decoded one on inbox.
     # Runs on its own thread and calls on_closed when the link ends.

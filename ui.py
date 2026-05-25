@@ -1091,7 +1091,12 @@ class JoinScreen(StyledScreen):
         self._handed_off = False
         self.status.text = ""
         self.connect_btn.disabled = False
-        self.ip_input.text = app().state.get_setting("mp_last_ip") or ""
+        # Use the last address that worked, or fall back to this device's own
+        # subnet (e.g. "192.168.1.") so the joiner only types the host's last
+        # number when they are on the same Wi-Fi.
+        last = app().state.get_setting("mp_last_ip")
+        self.ip_input.text = last if last else net.local_subnet_prefix()
+        self.ip_input.cursor = (len(self.ip_input.text), 0)
 
     def on_leave(self):
         if self._poll is not None:

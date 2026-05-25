@@ -140,8 +140,9 @@ def sense(game):
         "time_left": getattr(game, "time_left", None),
         "time_limit": game.level["time_limit"] if getattr(game, "level", None) else None,
         "coins_left": len(coins),
-        "ammo": getattr(game, "ammo", 0),
-        "reloading": getattr(game, "reload_time", 0.0) > 0,
+        # Ammo and reload live on the player sprite, so read them from there.
+        "ammo": getattr(player, "ammo", 0),
+        "reloading": getattr(player, "reload_time", 0.0) > 0,
     }
 
 

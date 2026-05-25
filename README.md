@@ -156,6 +156,17 @@ It produces an `.aab` for Google Play and an `.apk` for testing in the `bin` fol
 
 iOS apps must be built on a Mac. You do not need to own one: the GitHub Actions workflow at `.github/workflows/ios-build.yml` builds the app on a free macOS runner and gives you the files to install. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md). If you do have a Mac, the `build_ios.sh` script builds the Xcode project locally.
 
+### Desktop (Windows, Linux, macOS)
+
+`build_desktop.sh` packages the game into a standalone program with [PyInstaller](https://pyinstaller.org). PyInstaller builds for the system it runs on, so run it on each target:
+
+```
+./build_desktop.sh            # one standalone file in dist/
+./build_desktop.sh --onedir   # a folder that starts faster
+```
+
+On Windows, run it inside Git Bash or MSYS2 to get `dist\CoinTex.exe`. On Linux you get `dist/CoinTex` and on macOS `dist/CoinTex.app`. A Windows `.exe` cannot be built from Linux, since PyInstaller does not cross build.
+
 ## Project layout
 
 | Path | What it is |

@@ -48,6 +48,5 @@ Use `CoinTex-unsigned.ipa` with the steps in `IOS_INSTALL.md`.
 ## If a run fails
 
 1. Open the failed run and read the step shown in red.
-2. The most common fix is the macOS version. Edit `.github/workflows/ios-build.yml` and change `runs-on: macos-14` to
-   `runs-on: macos-13`, then run the workflow again.
+2. The most common fix is the macOS version. Edit `.github/workflows/ios-build.yml` and change `runs-on: macos-14` to `runs-on: macos-13`, then run the workflow again.
 3. To rebuild the toolchain from scratch, change the cache key suffix in the workflow from `v1` to `v2`, or delete the cache from the Actions cache list.

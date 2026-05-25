@@ -1,86 +1,179 @@
-# CoinTex: Cross-platform Multi-Level Game created in Python using Kivy
-CoinTex is a multi-level adventure game created using the **Kivy** cross-platform Python framework. The game is successfully tested in Linux, Windows, and Android and working on all of these platforms without even changing a single line of code. Here is a simple description of it.
+# CoinTex
 
-# Game Description
+CoinTex is a top down arcade game written entirely in Python with the [Kivy](https://kivy.org) framework. You move a character around each level to collect all the coins before the timer runs out, while dodging monsters and fire and shooting your way through. It runs from the same code on Windows, Linux, macOS, Android and iPhone.
 
-The game is multi-level. Once it is opened, the main screen appears that shows a matrix of all game levels, which are 24 up to this time. The main screen is given in the next figure. 
+Every screen, all of the graphics and all of the sound are generated in code, so the project has no image or audio asset files to ship beyond a handful of short sounds.
 
-![1](https://user-images.githubusercontent.com/16560492/57524758-14b88080-7329-11e9-809a-09d7bb08204b.jpg)
+<p align="center">
+  <img src="cointex_media/04_gameplay.png" width="640" alt="CoinTex gameplay">
+</p>
 
-There will be only 1 level activated which is level 1. Once level x is completed, the level x+1 will be activated until reaching the last level. Information about the latest level completed is stored in a file named "game_info". This file is created once level 1 is completed. If this file is removed, the game will return back to the initial state in which only level 1 is activated. By pressing a level, the user is directed to another screen where the player can start playing the game. The screen of level 1 is
-given below.
+## Contents
 
-![1](https://user-images.githubusercontent.com/16560492/57524794-36196c80-7329-11e9-9c2d-43e09d08197e.jpg)
+- [Get the game](#get-the-game)
+- [How to play](#how-to-play)
+- [Worlds](#worlds)
+- [Auto Player (a genetic algorithm plays for you)](#auto-player-a-genetic-algorithm-plays-for-you)
+- [Screenshots](#screenshots)
+- [Run from source](#run-from-source)
+- [Build the apps](#build-the-apps)
+- [Project layout](#project-layout)
+- [Learning resources](#learning-resources)
+- [Author](#author)
 
-Supposing that level 1 is completed successfully, level 2 will be activated on the main screen as given below.
+## Get the game
 
-![1](https://user-images.githubusercontent.com/16560492/57525130-323a1a00-732a-11e9-877a-9366c65ac7d2.jpg)
+### Android
 
-The game has a character that moves freely according to the touch position on the screen. The player has a time-unlimited mission which is collecting a number of coins that are randomly distributed on the screen. A coin is collected when there is a collision with it and the character. As shown in the previous figure, a text at the top-left of the screen shows the number of collected coins and the total number of coins at the current level. 
+CoinTex is on Google Play: https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast
 
-The first level has just 5 coins. The next figure shows how it looks like after 2 coins are collected. Once all coins are collected, the level completes and the user is directed to the main screen where the next level is active for being played.
+### iPhone
 
-![1](https://user-images.githubusercontent.com/16560492/57524900-87296080-7329-11e9-950e-7541501c3008.jpg)
+There is no App Store listing yet. You can build the iPhone app yourself for free with GitHub Actions and install it on your phone. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md) to produce the app file and [IOS_INSTALL.md](IOS_INSTALL.md) to install it on an iPhone.
 
-Collecting the coins is not that easy because there are monsters and thrown fire that struggles the player's way of completing the level. Their motion is not expected and thus it tests the player's ability to do fast reactions in order to avoid their collision. 
+### Windows, Linux and macOS
 
-Some levels might have only monsters, others may only have fire, and others may have a combination. When the player collides a monster or a fire, its health reduces by a percentage that is proportional to the collision time. There is a red bar at the top of the screen that reflects the current health of the player. he next figure shows the red bar after a collision occurs.
+Run the game from source. See [Run from source](#run-from-source) below.
 
-![1](https://user-images.githubusercontent.com/16560492/57525255-804f1d80-732a-11e9-81f3-20c55550cbff.jpg)
+## How to play
 
-The much time the player collides with a monster or a fire the much reduction in its health. When the health is zero, the player dies as given below. 
+The goal of every level is to collect all the coins before the timer at the top runs out.
 
-![1](https://user-images.githubusercontent.com/16560492/57525269-87762b80-732a-11e9-9e26-999e17322452.jpg)
+- Tap anywhere on the screen and your character walks there.
+- Collect every coin to finish the level and unlock the next one.
+- Your health bar is at the top left. Touching a monster or fire drains it. When it reaches zero you lose the level.
+- Finish a level with more health left to earn up to 3 stars.
 
-Note that the game includes some **sound effects**. There is also background music running while the main screen is open or any level is being played.
+The hazards you meet:
 
-# Running the Project for Developers
+- Monsters drain your health on contact. The dots above a monster show how many hits it takes to defeat. From world 4 some monsters chase you and turn bright red, so you have to outrun them or shoot them.
+- Fire sweeps across the screen. From world 3 it grows and shrinks as it moves, so the safe gap keeps changing.
+- A blue freeze clock shows up rarely. Grab it to freeze every monster for a few seconds.
 
-Before running the game, you have to make sure Kivy is installing and running successfully. To get started with Kivy, check the resources given below:
+Your gun:
 
-## Tutorial: [Python for Android: Start Building Kivy Cross-Platform Applications](https://www.linkedin.com/pulse/python-android-start-building-kivy-cross-platform-applications-gad)
+- Tap the gun button to shoot. It aims at the nearest monster on its own, so you never have to aim.
+- You have a few shots. From world 4 the gun reloads by itself, with a countdown shown on the gun button.
 
-This tutorial titled [Python for Android: Start Building Kivy Cross-Platform Applications](https://www.linkedin.com/pulse/python-android-start-building-kivy-cross-platform-applications-gad) covers the steps for creating an Android app out of the Kivy app.
+A short interactive tutorial runs the first time you play, and you can replay it any time from the main menu with "How to play". The "Guide" screen lists every element with the same icons used in the game.
 
-[![Kivy-Tutorial](https://user-images.githubusercontent.com/16560492/86205332-dfdd3d80-bb69-11ea-91fb-cb0143cb1e5e.png)](https://www.linkedin.com/pulse/python-android-start-building-kivy-cross-platform-applications-gad)
+## Worlds
 
-## Book: [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303)
+There are 6 worlds with 10 levels each, 60 levels in total. Every level is timed. Instead of getting harder by crowding the screen with more enemies, each world turns up the behaviour of the few on screen, so the game stays smooth on a phone.
 
-To get started with Kivy app development and how to built Android apps out of the Kivy app, check the book titled [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303). This book documents the CoinTex game from A to Z in chapters 5 and 6.
+1. Meadow: the basics, gentle pace.
+2. Desert: enemies move faster.
+3. Ocean: fire grows and shrinks as it moves.
+4. Cavern: monsters start chasing you, and your gun reloads on its own.
+5. Volcano: contact hurts more and the pace climbs.
+6. Space: everything at its hardest.
 
-[![kivy-book](https://user-images.githubusercontent.com/16560492/86205093-575e9d00-bb69-11ea-82f7-23fef487ce3c.jpg)](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303)
+## Auto Player (a genetic algorithm plays for you)
 
-After making sure Kivy is running, just use the next terminal command to run the main file of the game **main.py**. The game is developed in Python 3 and so the terminal command **python3** is used for Linux/Mac.
+Tap the Auto button during a level and a small genetic algorithm takes over. It steers toward coins while keeping clear of monsters and fire, shoots chasers and races the timer. Tap Auto again to take back control.
 
-`ahmed-gad@ubuntu:~/Desktop/CoinTex$ python3 main.py`
+You can tune how it plays from Settings, then Auto Player:
 
-For Android, the APK file is built using Buildozer and this is why the **buildozer.spec** file exists in the project. Just use this terminal command for exporting the APK file. 
+- Play style: Cautious, Balanced or Aggressive (safety versus collecting coins).
+- Reaction speed: Slow, Normal or Fast (how often it re-decides).
 
-After it runs successfully, the APK file will be exported. For more information about installing Buildozer, generating, and locating the APK file, you can read the tutorial and [chapter 8 of the book mentioned above](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303).
+The agent is plain Python and adds no extra dependencies, so it ships inside the app on every platform. A separate, research oriented version that searches with [PyGAD](https://github.com/ahmedfgad/GeneticAlgorithmPython) lives in the `PlayerGA` folder.
 
-`ahmed-gad@ubuntu:~/Desktop/CoinTex$ buildozer android release deploy run`
+## Screenshots
 
-# Running the Game for End Users
+<table>
+  <tr>
+    <td align="center">
+      <img src="cointex_media/02_worldmap.png" width="420"><br>Select a world
+    </td>
+    <td align="center">
+      <img src="cointex_media/03_levelselect.png" width="420"><br>Pick a level and see your stars
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="cointex_media/05_combat_chasers.png" width="420"><br>A chasing monster and the reloading gun
+    </td>
+    <td align="center">
+      <img src="cointex_media/06_win_stars.png" width="420"><br>Level cleared with a star rating
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="cointex_media/07_auto_player.png" width="420"><br>Auto Player settings
+    </td>
+    <td align="center">
+      <img src="cointex_media/08_guide.png" width="420"><br>In game guide
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="cointex_media/01_menu.png" width="420"><br>Interactive tutorial
+    </td>
+    <td align="center">
+      <img src="cointex_media/04_gameplay.png" width="420"><br>Collecting coins in the Meadow
+    </td>
+  </tr>
+</table>
 
-The game is already distributed for end-user to download and run easily for Android and Linux. For Linux, it is available at [this link](https://www.linux-apps.com/p/1279788). 
+## Run from source
 
-For Android, it is available at [Google Play](https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast).
+You need Python 3.9 or newer. The game was developed on Python 3.12 with Kivy 2.3.
 
-For iPhone, see [IOS_INSTALL.md](IOS_INSTALL.md) for the steps to install the game on your device.
+```
+git clone https://github.com/ahmedfgad/CoinTex.git
+cd CoinTex
+python -m pip install -r requirements.txt
+python main.py
+```
 
-# Game Documentation
+On Linux you can instead run `./setup_venv.sh`, which creates a virtual environment and installs Kivy and the desktop libraries it needs. It also sets up the Android build tools, so use it if you plan to build the Android app as well.
 
-The CoinTex game is 100% documented in chapters 5 and 6 of the book titled [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303). It starts from a hello world app until building CoinTex.
+If you run the game on a machine with no audio output, such as some virtual machines, start it with `SDL_AUDIODRIVER=dummy python main.py` so the audio backend does not block.
 
-[![kivy-book](https://user-images.githubusercontent.com/16560492/86205093-575e9d00-bb69-11ea-82f7-23fef487ce3c.jpg)](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303)
+## Build the apps
 
-# For Contacting the Author
+### Android
 
-* E-mail: [ahmed.f.gad@gmail.com](mailto:ahmed.f.gad@gmail.com)
-* [LinkedIn](https://www.linkedin.com/in/ahmedfgad)
-* [Amazon Author Page](https://amazon.com/author/ahmedgad)
-* [Heartbeat](https://heartbeat.fritz.ai/@ahmedfgad)
-* [Paperspace](https://blog.paperspace.com/author/ahmed)
-* [KDnuggets](https://kdnuggets.com/author/ahmed-gad)
-* [TowardsDataScience](https://towardsdatascience.com/@ahmedfgad)
-* [GitHub](https://github.com/ahmedfgad)
+The Android app is built with [Buildozer](https://github.com/kivy/buildozer) using the settings in `buildozer.spec`. The helper script builds the signed release files:
+
+```
+./build_android.sh
+```
+
+It produces an `.aab` for Google Play and an `.apk` for testing in the `bin` folder. Signing the release is described in [SIGNING.md](SIGNING.md).
+
+### iPhone
+
+iOS apps must be built on a Mac. You do not need to own one: the GitHub Actions workflow at `.github/workflows/ios-build.yml` builds the app on a free macOS runner and gives you the files to install. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md). If you do have a Mac, the `build_ios.sh` script builds the Xcode project locally.
+
+## Project layout
+
+| Path | What it is |
+| --- | --- |
+| `main.py` | The app and the gameplay screen. |
+| `levels.py` | The 60 levels and how each world scales in difficulty. |
+| `graphics.py` | All sprites and effects, drawn in code on the Kivy canvas. |
+| `ui.py` | Menus, settings, tutorial, guide and the Auto Player screen. |
+| `audio.py` | Music and sound effects. |
+| `state.py` | Saved progress and settings. |
+| `autoplay.py` | The in game genetic algorithm Auto Player. |
+| `tools/` | Scripts that generate the sounds and render the sprite preview. |
+| `PlayerGA/` | The research version of the player that searches with PyGAD. |
+| `cointex_media/` | Screenshots and the promo video. |
+
+## Learning resources
+
+CoinTex started as the example game for learning Kivy and Android packaging. The following cover the original version of the game and are a good way to learn how a Kivy game is built and turned into an Android app.
+
+- Tutorial: [Python for Android: Start Building Kivy Cross-Platform Applications](https://www.linkedin.com/pulse/python-android-start-building-kivy-cross-platform-applications-gad)
+- Book: [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303), which documents CoinTex in chapters 5 and 6.
+
+## Author
+
+Ahmed Fawzy Gad
+
+- Email: [ahmed.f.gad@gmail.com](mailto:ahmed.f.gad@gmail.com)
+- LinkedIn: [linkedin.com/in/ahmedfgad](https://www.linkedin.com/in/ahmedfgad)
+- GitHub: [github.com/ahmedfgad](https://github.com/ahmedfgad)
+- Amazon author page: [amazon.com/author/ahmedgad](https://amazon.com/author/ahmedgad)

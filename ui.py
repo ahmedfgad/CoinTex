@@ -951,8 +951,24 @@ class HostScreen(StyledScreen):
 
     def on_enter(self):
         app().audio.play_menu_music()
-        self._ready = False
         self._handed_off = False
+        self._begin_listening()
+        # Look up the internet address once per visit, in the background so the
+        # UI never blocks on the network.
+        self.inet_label.text = "Checking your internet address..."
+        self._ip_token += 1
+        token = self._ip_token
+        threading.Thread(target=self._fetch_public_ip, args=(token, net.DEFAULT_PORT),
+                         daemon=True).start()
+        self._poll = Clock.schedule_interval(self._check, 0.2)
+
+    def _begin_listening(self):
+        # Open (or re-open) the listening socket so a player can join. The host
+        # only accepts one connection at a time, so this is called again if a
+        # player connects and then leaves, to keep the host waiting.
+        if self.net is not None:
+            self.net.stop()
+        self._ready = False
         self.start_btn.disabled = True
         self.start_btn.bg = [0.3, 0.3, 0.35, 1]
         self.status.text = "Waiting for a player to join..."
@@ -962,19 +978,9 @@ class HostScreen(StyledScreen):
             self.net.start_listening()
             self.addr_label.text = "Same Wi-Fi address\n{}   port {}".format(
                 net.get_local_ip(), self.net.port)
-            # Look up the internet address in the background so the UI never
-            # blocks waiting on the network.
-            self.inet_label.text = "Checking your internet address..."
-            self._ip_token += 1
-            token = self._ip_token
-            port = self.net.port
-            threading.Thread(target=self._fetch_public_ip, args=(token, port),
-                             daemon=True).start()
         except Exception as error:
             self.addr_label.text = "Could not start hosting."
-            self.inet_label.text = ""
             self.status.text = str(error)
-        self._poll = Clock.schedule_interval(self._check, 0.2)
 
     def _fetch_public_ip(self, token, port):
         ip = net.get_public_ip()
@@ -1027,19 +1033,18 @@ class HostScreen(StyledScreen):
                 self.status.text = "A player is connecting..."
             elif kind == "hello":
                 if msg.get("version") != net.PROTOCOL_VERSION:
-                    self.status.text = "That player has a different game version."
-                    self.net.stop()
-                    self.net = None
+                    self._begin_listening()
+                    self.status.text = "A player with a different game version tried to join."
                     return
                 self._ready = True
                 self.status.text = "A player joined. Tap Start."
                 self.start_btn.disabled = False
                 self.start_btn.bg = [0.2, 0.7, 0.4, 1]
             elif kind in ("leave", "_disconnected"):
-                self._ready = False
-                self.status.text = "The player left. Waiting again..."
-                self.start_btn.disabled = True
-                self.start_btn.bg = [0.3, 0.3, 0.35, 1]
+                # The host stopped listening once that player connected, so open
+                # the listener again to accept a fresh join.
+                self._begin_listening()
+                return
 
     def _start(self):
         if not self._ready or self.net is None:

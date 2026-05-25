@@ -24,6 +24,7 @@ from kivy.metrics import sp, dp
 import levels
 import graphics
 import ui
+import autoplay
 from state import GameState
 from audio import AudioManager
 
@@ -103,6 +104,9 @@ class GameScreen(Screen):
         self.ammo = 0
         self.freeze_time = 0.0
         self._update_event = None
+        # Auto play: the built-in genetic algorithm can take over from the player.
+        self.auto_mode = False
+        self.auto = autoplay.AutoPlayer(self)
 
     def _build_hud(self):
         self.coin_label = Label(text="", font_size=sp(20), bold=True, color=[1, 1, 1, 1],
@@ -139,6 +143,20 @@ class GameScreen(Screen):
                                                  pos_hint={"center_x": 0.5, "top": 0.90})
         self.freeze_timer.opacity = 0
         self.hud.add_widget(self.freeze_timer)
+
+        # Auto play toggle (bottom-left). Tapping it lets the built-in genetic
+        # algorithm take over, and tapping again returns to manual control.
+        self.auto_btn = ui.StyledButton(text="Auto: Off", bg=[0.45, 0.45, 0.5, 1],
+                                        font_size=sp(16), size_hint=(0.17, 0.08),
+                                        pos_hint={"x": 0.02, "y": 0.05})
+        self.auto_btn.bind(on_release=lambda *a: self._toggle_auto())
+        self.hud.add_widget(self.auto_btn)
+
+        # Shows while the agent is in control so it is clear who is playing.
+        self.auto_indicator = Label(text="AUTO", font_size=sp(16), bold=True,
+                                    color=[0.3, 1.0, 0.5, 1], opacity=0,
+                                    size_hint=(0.17, 0.05), pos_hint={"x": 0.02, "y": 0.14})
+        self.hud.add_widget(self.auto_indicator)
 
     def _sync_health(self, *args):
         self._hp_bg.pos = self.health_holder.pos
@@ -227,6 +245,13 @@ class GameScreen(Screen):
         self.freeze_timer.opacity = 0
         self._refresh_hud()
 
+        # Keep the chosen play mode (manual or auto) when moving between levels.
+        self._refresh_auto_button()
+        if self.auto_mode:
+            self.auto.start()
+        else:
+            self.auto.stop()
+
     def _random_point(self):
         return random.uniform(0.1, 0.95), random.uniform(0.15, 0.95)
 
@@ -281,6 +306,7 @@ class GameScreen(Screen):
         Window.bind(on_key_down=self._on_key)
 
     def on_leave(self):
+        self.auto.stop()
         if self._update_event is not None:
             self._update_event.cancel()
             self._update_event = None
@@ -572,6 +598,7 @@ class GameScreen(Screen):
         if not self.active:
             return
         self.active = False
+        self.auto.stop()
         app = kivy.app.App.get_running_app()
         app.audio.stop_music()  # all coins collected, so the level music stops
         app.audio.play_sfx("victory")
@@ -590,6 +617,7 @@ class GameScreen(Screen):
         if not self.active:
             return
         self.active = False
+        self.auto.stop()
         app = kivy.app.App.get_running_app()
         app.audio.stop_music()  # level over
         if self.player is not None:
@@ -622,6 +650,29 @@ class GameScreen(Screen):
         if self.active:
             self.paused = False
             kivy.app.App.get_running_app().audio.play_level_music(self.level["world"])
+            if self.auto_mode:
+                self.auto.start()
+
+    # ----- auto play -----
+    def _toggle_auto(self):
+        # Switch between the player and the genetic algorithm.
+        self.auto_mode = not self.auto_mode
+        self._refresh_auto_button()
+        if self.auto_mode:
+            if self.active and not self.paused:
+                self.auto.start()
+        else:
+            self.auto.stop()
+
+    def _refresh_auto_button(self):
+        if self.auto_mode:
+            self.auto_btn.text = "Auto: On"
+            self.auto_btn.bg = [0.2, 0.7, 0.4, 1]
+            self.auto_indicator.opacity = 1
+        else:
+            self.auto_btn.text = "Auto: Off"
+            self.auto_btn.bg = [0.45, 0.45, 0.5, 1]
+            self.auto_indicator.opacity = 0
 
 
 class CointexApp(kivy.app.App):

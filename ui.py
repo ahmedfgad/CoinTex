@@ -33,6 +33,10 @@ ABOUT_TEXT = (
     "CoinTex is built 100% with Python using the Kivy framework. Every screen, "
     "all the graphics and the sound are made in code.\n"
     "\n"
+    "Tap the Auto button during a level to let the game play itself. A small "
+    "genetic algorithm takes over and steers to the coins while keeping clear of "
+    "monsters and fire. Tap it again to take back control.\n"
+    "\n"
     "Created by Ahmed Fawzy Gad.\n"
     "Email: ahmed.f.gad@gmail.com"
 )

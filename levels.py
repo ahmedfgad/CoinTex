@@ -72,6 +72,13 @@ def build_levels():
             # Health shrinks from 60 down to 30 across the game, so touching a
             # monster or fire matters much more in later levels.
             "player_health": _clamp(60 - (g - 1) // 2, 30, 60),
+            # Ammo is 1 to 3 and equals a monster's hit points, so a full clip can
+            # take down exactly one monster (which then respawns). Firing is for
+            # clearing a blocker, not for winning.
+            "ammo": _clamp(monster_hp, 1, 3),
+            # A freeze pickup pauses the monsters for a while. It is a rare
+            # reward: only about every 7th level has one.
+            "freezers": 1 if g % 7 == 0 else 0,
         })
     return levels
 

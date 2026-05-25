@@ -116,6 +116,10 @@ class PlayerSprite(CanvasSprite):
     dead = BooleanProperty(False)
     body_color = ListProperty([0.20, 0.62, 1.0])
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(dead=self._redraw, body_color=self._redraw)
+
     def draw(self):
         x, y = self.pos
         w, h = self.size
@@ -196,6 +200,11 @@ class MonsterSprite(CanvasSprite):
     mtype = NumericProperty(1)
     hp = NumericProperty(1)
     max_hp = NumericProperty(1)
+    frozen = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(mtype=self._redraw, hp=self._redraw, max_hp=self._redraw, frozen=self._redraw)
 
     def draw(self):
         x, y = self.pos
@@ -263,6 +272,11 @@ class MonsterSprite(CanvasSprite):
             for i in range(int(self.max_hp)):
                 Color(0.95, 0.85, 0.2, 1) if i < self.hp else Color(0.3, 0.3, 0.3, 1)
                 Ellipse(pos=(start + i * pip * 2.2, cy + r * 1.25), size=(pip * 1.6, pip * 1.6))
+
+        if self.frozen:
+            # icy tint to show the monster is paused
+            Color(0.6, 0.85, 1.0, 0.45)
+            Ellipse(pos=(cx - r * 1.05, cy - r * 1.05), size=(r * 2.1, r * 2.1))
 
         if self.flash > 0:
             Color(1, 1, 1, self.flash * 0.85)
@@ -382,3 +396,146 @@ class Background(Widget):
                 px = x + rnd.uniform(0, w)
                 py = y + rnd.uniform(0, h)
                 Ellipse(pos=(px - r, py - r), size=(r * 2, r * 2))
+
+
+class Freezer(CanvasSprite):
+    # A rare pickup that freezes the monsters for a while when collected.
+    def draw(self):
+        x, y = self.pos
+        w, h = self.size
+        cx, cy = x + w / 2, y + h / 2
+        r = min(w, h) * 0.42 * (0.9 + 0.1 * math.sin(self.phase * 4.0))
+        Color(0, 0, 0, 0.18)
+        Ellipse(pos=(cx - r, y + h * 0.04), size=(r * 2, r * 0.4))
+        Color(0.30, 0.70, 1.0, 1)
+        Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+        Color(0.78, 0.93, 1.0, 1)
+        Ellipse(pos=(cx - r * 0.7, cy - r * 0.7), size=(r * 1.4, r * 1.4))
+        Color(1, 1, 1, 1)
+        for k in range(3):
+            ang = math.pi * k / 3
+            dx, dy = math.cos(ang) * r * 0.7, math.sin(ang) * r * 0.7
+            Line(points=[cx - dx, cy - dy, cx + dx, cy + dy], width=1.6)
+
+
+class FreezeTimer(Widget):
+    # A round countdown shown while the freeze is active. The blue wedge shrinks
+    # clockwise and the number in the middle shows the seconds left.
+    fraction = NumericProperty(1.0)
+    seconds = NumericProperty(0.0)
+
+    def __init__(self, **kwargs):
+        from kivy.uix.label import Label
+        super().__init__(**kwargs)
+        self.label = Label(text="", bold=True, color=(1, 1, 1, 1))
+        self.add_widget(self.label)
+        self.bind(pos=self._redraw, size=self._redraw,
+                  fraction=self._redraw, seconds=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *args):
+        x, y = self.pos
+        w, h = self.size
+        cx, cy = x + w / 2, y + h / 2
+        r = min(w, h) * 0.5
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(0.05, 0.16, 0.32, 0.9)
+            Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+            Color(0.45, 0.80, 1.0, 1)
+            Ellipse(pos=(cx - r * 0.92, cy - r * 0.92), size=(r * 1.84, r * 1.84),
+                    angle_start=0, angle_end=360 * max(0.0, min(1.0, self.fraction)))
+            Color(0.05, 0.16, 0.32, 1)
+            Ellipse(pos=(cx - r * 0.6, cy - r * 0.6), size=(r * 1.2, r * 1.2))
+        self.label.center = (cx, cy)
+        self.label.font_size = r * 0.8
+        self.label.text = str(int(math.ceil(self.seconds))) if self.seconds > 0 else ""
+
+
+class RespawnMarker(Widget):
+    # Marks the spot where a killed monster will return and counts down the time
+    # left with a shrinking red ring and a number.
+    fraction = NumericProperty(1.0)
+    seconds = NumericProperty(0.0)
+
+    def __init__(self, **kwargs):
+        from kivy.uix.label import Label
+        super().__init__(**kwargs)
+        self.label = Label(text="", bold=True, color=(1, 1, 1, 0.9))
+        self.add_widget(self.label)
+        self.bind(pos=self._redraw, size=self._redraw,
+                  fraction=self._redraw, seconds=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *args):
+        x, y = self.pos
+        w, h = self.size
+        cx, cy = x + w / 2, y + h / 2
+        r = min(w, h) * 0.5
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(0.12, 0.05, 0.05, 0.5)
+            Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+            Color(0.95, 0.35, 0.30, 0.95)
+            Ellipse(pos=(cx - r * 0.92, cy - r * 0.92), size=(r * 1.84, r * 1.84),
+                    angle_start=0, angle_end=360 * max(0.0, min(1.0, self.fraction)))
+            Color(0.12, 0.05, 0.05, 0.85)
+            Ellipse(pos=(cx - r * 0.6, cy - r * 0.6), size=(r * 1.2, r * 1.2))
+        self.label.center = (cx, cy)
+        self.label.font_size = r * 0.85
+        self.label.text = str(int(math.ceil(self.seconds))) if self.seconds > 0 else ""
+
+
+def draw_star(cx, cy, outer, color):
+    # Draw a filled 5-pointed star centered at (cx, cy) as a fan of triangles.
+    inner = outer * 0.42
+    pts = []
+    for i in range(10):
+        ang = math.radians(-90 + i * 36)
+        rr = outer if i % 2 == 0 else inner
+        pts.append((cx + math.cos(ang) * rr, cy + math.sin(ang) * rr))
+    Color(*color)
+    for i in range(10):
+        ax, ay = pts[i]
+        bx, by = pts[(i + 1) % 10]
+        Triangle(points=[cx, cy, ax, ay, bx, by])
+
+
+class StarRow(Widget):
+    # Shows `total` stars, the first `earned` filled gold and the rest faint.
+    earned = NumericProperty(0)
+    total = NumericProperty(3)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(pos=self._redraw, size=self._redraw, earned=self._redraw, total=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *args):
+        x, y = self.pos
+        w, h = self.size
+        n = max(1, int(self.total))
+        slot = w / n
+        outer = min(slot, h) * 0.46
+        cy = y + h / 2
+        self.canvas.before.clear()
+        with self.canvas.before:
+            for i in range(n):
+                cx = x + slot * (i + 0.5)
+                if i < self.earned:
+                    draw_star(cx, cy, outer, (1.0, 0.85, 0.2, 1))     # earned
+                    Color(0.7, 0.5, 0.0, 1)
+                    Line(points=_star_outline(cx, cy, outer), width=1.2, close=True)
+                else:
+                    draw_star(cx, cy, outer, (1.0, 1.0, 1.0, 0.20))   # not earned
+
+
+def _star_outline(cx, cy, outer):
+    # Perimeter points of a 5-pointed star, for drawing an outline.
+    inner = outer * 0.42
+    pts = []
+    for i in range(10):
+        ang = math.radians(-90 + i * 36)
+        rr = outer if i % 2 == 0 else inner
+        pts += [cx + math.cos(ang) * rr, cy + math.sin(ang) * rr]
+    return pts

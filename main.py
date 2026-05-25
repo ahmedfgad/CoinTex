@@ -30,17 +30,21 @@ from audio import AudioManager
 # Tuning values. Positions are kept as a center point in 0..1 over the play area.
 PLAYER_SPEED = 0.6          # how fast the player moves, screens per second
 PROJECTILE_SPEED = 1.2
-FIRE_COOLDOWN = 0.45        # seconds between shots
-CONTACT_DAMAGE = 42.0       # health lost per second while touching a monster/fire
+FIRE_COOLDOWN = 0.6         # seconds between shots
+CONTACT_DAMAGE = 60.0       # health lost per second while touching a monster/fire
 COIN_POINTS = 100
 KILL_POINTS = 150
 TIME_BONUS = 4              # score per second left when a level has a time limit
+RESPAWN_DELAY = 3.0         # seconds before a killed monster comes back
+FREEZE_DURATION = 5.0       # seconds the monsters stay frozen after a pickup
 
 PLAYER_SIZE = (0.10, 0.14)
 MONSTER_SIZE = (0.11, 0.14)
 COIN_SIZE = (0.045, 0.06)
 HAZARD_SIZE = (0.05, 0.08)
 PROJECTILE_SIZE = (0.035, 0.05)
+FREEZER_SIZE = (0.05, 0.07)
+RESPAWN_MARKER_SIZE = (0.07, 0.10)
 
 
 def place(sprite):
@@ -51,18 +55,20 @@ def place(sprite):
 
 class ResultOverlay(ModalView):
     # Shown when a level is won or lost. Offers next/retry/menu actions.
-    def __init__(self, title, lines, buttons, **kwargs):
+    def __init__(self, title, lines, buttons, stars=None, **kwargs):
         super().__init__(size_hint=(0.8, 0.6), auto_dismiss=False, **kwargs)
-        box = BoxLayout(orientation="vertical", padding=dp(22), spacing=dp(14))
+        box = BoxLayout(orientation="vertical", padding=dp(22), spacing=dp(12))
         with box.canvas.before:
             Color(0.12, 0.14, 0.22, 0.98)
             self._bg = RoundedRectangle(radius=[dp(16)])
         box.bind(pos=lambda *a: setattr(self._bg, "pos", box.pos),
                  size=lambda *a: setattr(self._bg, "size", box.size))
         box.add_widget(Label(text=title, font_size=sp(34), bold=True,
-                             color=[1, 0.85, 0.2, 1], size_hint_y=0.3))
+                             color=[1, 0.85, 0.2, 1], size_hint_y=0.26))
+        if stars is not None:
+            box.add_widget(graphics.StarRow(earned=stars, total=3, size_hint_y=0.28))
         box.add_widget(Label(text="\n".join(lines), font_size=sp(20),
-                             color=[1, 1, 1, 1], halign="center", size_hint_y=0.4))
+                             color=[1, 1, 1, 1], halign="center", size_hint_y=0.22))
         row = BoxLayout(orientation="horizontal", spacing=dp(12), size_hint_y=0.3)
         for text, color, callback in buttons:
             btn = ui.StyledButton(text=text, bg=color)
@@ -92,6 +98,10 @@ class GameScreen(Screen):
         self.coins = []
         self.hazards = []
         self.projectiles = []
+        self.freezers = []
+        self.pending_respawns = []   # seconds left before each killed monster returns
+        self.ammo = 0
+        self.freeze_time = 0.0
         self._update_event = None
 
     def _build_hud(self):
@@ -120,10 +130,15 @@ class GameScreen(Screen):
         self.pause_btn.bind(on_release=lambda *a: self._open_pause())
         self.hud.add_widget(self.pause_btn)
 
-        self.fire_btn = ui.StyledButton(text="Fire", bg=[0.9, 0.4, 0.2, 0.9],
-                                        size_hint=(0.16, 0.12), pos_hint={"right": 0.98, "y": 0.03})
+        self.fire_btn = ui.GunButton(size_hint=(0.17, 0.13), pos_hint={"right": 0.98, "y": 0.03})
         self.fire_btn.bind(on_release=lambda *a: self.fire())
         self.hud.add_widget(self.fire_btn)
+
+        # circular freeze countdown, shown only while a freeze is active
+        self.freeze_timer = graphics.FreezeTimer(size_hint=(0.09, 0.14),
+                                                 pos_hint={"center_x": 0.5, "top": 0.90})
+        self.freeze_timer.opacity = 0
+        self.hud.add_widget(self.freeze_timer)
 
     def _sync_health(self, *args):
         self._hp_bg.pos = self.health_holder.pos
@@ -154,6 +169,10 @@ class GameScreen(Screen):
         self.collected = 0
         self.cooldown = 0.0
         self.time_left = self.level["time_limit"]
+        self.ammo = self.level["ammo"]
+        self.freeze_time = 0.0
+        self.pending_respawns = []
+        self.monster_speed = 0.45 / self.level["monster_speed"]
         self.active = True
         self.paused = False
 
@@ -165,21 +184,9 @@ class GameScreen(Screen):
         self.world.add_widget(self.player)
         self.player.start()
 
-        # monsters
-        speed_norm = 0.45 / self.level["monster_speed"]
+        # monsters (they respawn when killed, so they cannot all be cleared)
         for i in range(self.level["monsters"]):
-            # Monster looks match their toughness: hp 1, 2 or 3 -> type 1, 2 or 3.
-            monster = graphics.MonsterSprite(size_hint=MONSTER_SIZE)
-            monster.mtype = max(1, min(3, self.level["monster_hp"]))
-            monster.max_hp = self.level["monster_hp"]
-            monster.hp = monster.max_hp
-            monster.cx, monster.cy = random.uniform(0.4, 0.9), random.uniform(0.4, 0.9)
-            monster.tx, monster.ty = self._random_point()
-            monster.speed = speed_norm
-            place(monster)
-            self.world.add_widget(monster)
-            monster.start()
-            self.monsters.append(monster)
+            self._spawn_monster()
 
         # coins, spread across the width in sections like the original game
         section = 1.0 / self.level["coins"]
@@ -206,22 +213,64 @@ class GameScreen(Screen):
             hazard.start()
             self.hazards.append(hazard)
 
+        # rare freeze pickups
+        for i in range(self.level["freezers"]):
+            freezer = graphics.Freezer(size_hint=FREEZER_SIZE)
+            freezer.cx, freezer.cy = random.uniform(0.15, 0.9), random.uniform(0.2, 0.85)
+            place(freezer)
+            self.world.add_widget(freezer)
+            freezer.start()
+            self.freezers.append(freezer)
+
+        self.fire_btn.ammo = self.ammo
+        self.fire_btn.ready = True
+        self.freeze_timer.opacity = 0
         self._refresh_hud()
 
     def _random_point(self):
         return random.uniform(0.1, 0.95), random.uniform(0.15, 0.95)
 
+    def _spawn_point_away(self):
+        # A random point that is not right on top of the player.
+        for _ in range(10):
+            x, y = self._random_point()
+            if self.player is None or abs(x - self.player.cx) + abs(y - self.player.cy) > 0.35:
+                return x, y
+        return self._random_point()
+
+    def _spawn_monster(self, at=None):
+        monster = graphics.MonsterSprite(size_hint=MONSTER_SIZE)
+        monster.mtype = max(1, min(3, self.level["monster_hp"]))
+        monster.max_hp = self.level["monster_hp"]
+        monster.hp = monster.max_hp
+        monster.cx, monster.cy = at if at is not None else self._spawn_point_away()
+        monster.tx, monster.ty = self._random_point()
+        monster.speed = self.monster_speed
+        monster.frozen = self.freeze_time > 0
+        place(monster)
+        self.world.add_widget(monster)
+        monster.start()
+        self.monsters.append(monster)
+
     def _clear_sprites(self):
-        for sprite in [self.player] + self.monsters + self.coins + self.hazards + self.projectiles:
+        for sprite in ([self.player] + self.monsters + self.coins + self.hazards
+                       + self.projectiles + self.freezers):
             if sprite is not None:
                 sprite.stop()
                 if sprite.parent:
                     sprite.parent.remove_widget(sprite)
+        for entry in self.pending_respawns:
+            marker = entry["marker"]
+            if marker.parent:
+                marker.parent.remove_widget(marker)
         self.player = None
         self.monsters = []
         self.coins = []
         self.hazards = []
         self.projectiles = []
+        self.freezers = []
+        self.pending_respawns = []
+        self.freeze_time = 0.0
 
     # ----- screen lifecycle -----
     def on_enter(self):
@@ -263,12 +312,22 @@ class GameScreen(Screen):
         if self.cooldown > 0:
             self.cooldown -= dt
 
+        frozen = self.freeze_time > 0
+        if frozen:
+            self.freeze_time -= dt
+            if self.freeze_time <= 0:
+                self.freeze_time = 0.0
+                for monster in self.monsters:
+                    monster.frozen = False
+                frozen = False
+
         self._move_toward(self.player, self.player.tx, self.player.ty, PLAYER_SPEED * dt)
 
-        for monster in self.monsters:
-            reached = self._move_toward(monster, monster.tx, monster.ty, monster.speed * dt)
-            if reached:
-                monster.tx, monster.ty = self._random_point()
+        if not frozen:
+            for monster in self.monsters:
+                reached = self._move_toward(monster, monster.tx, monster.ty, monster.speed * dt)
+                if reached:
+                    monster.tx, monster.ty = self._random_point()
 
         for hazard in self.hazards:
             hazard.t = (hazard.t + dt / hazard.period) % 1.0
@@ -278,10 +337,52 @@ class GameScreen(Screen):
             place(hazard)
 
         self._update_projectiles(dt)
+        self._process_respawns(dt)
         self._check_coins()
+        self._check_freezers()
         self._check_damage(dt)
         self._update_timer(dt)
         self._update_health_bar()
+        self._update_combat_hud()
+
+    def _process_respawns(self, dt):
+        if not self.pending_respawns:
+            return
+        remaining = []
+        for entry in self.pending_respawns:
+            entry["t"] -= dt
+            if entry["t"] <= 0:
+                if entry["marker"].parent:
+                    entry["marker"].parent.remove_widget(entry["marker"])
+                if self.active:
+                    self._spawn_monster(at=(entry["x"], entry["y"]))
+            else:
+                entry["marker"].seconds = entry["t"]
+                entry["marker"].fraction = entry["t"] / RESPAWN_DELAY
+                remaining.append(entry)
+        self.pending_respawns = remaining
+
+    def _check_freezers(self):
+        for freezer in list(self.freezers):
+            if self._overlap(self.player, freezer, factor=0.8):
+                self.freezers.remove(freezer)
+                freezer.stop()
+                if freezer.parent:
+                    freezer.parent.remove_widget(freezer)
+                self.freeze_time = FREEZE_DURATION
+                for monster in self.monsters:
+                    monster.frozen = True
+                kivy.app.App.get_running_app().audio.play_sfx("coin")
+
+    def _update_combat_hud(self):
+        self.fire_btn.ammo = self.ammo
+        self.fire_btn.ready = self.cooldown <= 0
+        if self.freeze_time > 0:
+            self.freeze_timer.opacity = 1
+            self.freeze_timer.seconds = self.freeze_time
+            self.freeze_timer.fraction = self.freeze_time / FREEZE_DURATION
+        else:
+            self.freeze_timer.opacity = 0
 
     def _move_toward(self, sprite, tx, ty, step):
         dx = tx - sprite.cx
@@ -320,12 +421,14 @@ class GameScreen(Screen):
     def fire(self):
         if not self.active or self.paused or self.player is None:
             return
-        if self.cooldown > 0 or not self.monsters:
+        if self.cooldown > 0 or self.ammo <= 0 or not self.monsters:
             return
         target = self._nearest_monster()
         if target is None:
             return
         self.cooldown = FIRE_COOLDOWN
+        self.ammo -= 1
+        self.fire_btn.ammo = self.ammo
         shot = graphics.Projectile(size_hint=PROJECTILE_SIZE)
         shot.cx, shot.cy = self.player.cx, self.player.cy
         shot.target = target
@@ -381,6 +484,13 @@ class GameScreen(Screen):
                 monster.parent.remove_widget(monster)
             if monster in self.monsters:
                 self.monsters.remove(monster)
+            # drop a countdown marker where it died; it returns there at zero
+            marker = graphics.RespawnMarker(size_hint=RESPAWN_MARKER_SIZE)
+            marker.cx, marker.cy = monster.cx, monster.cy
+            place(marker)
+            self.world.add_widget(marker)
+            self.pending_respawns.append({"t": RESPAWN_DELAY, "x": monster.cx,
+                                          "y": monster.cy, "marker": marker})
             app.audio.play_sfx("monster_death")
         else:
             app.audio.play_sfx("hit")
@@ -410,10 +520,11 @@ class GameScreen(Screen):
         if self.player.dead:
             return
         touching = False
-        for monster in self.monsters:
-            if self._overlap(self.player, monster, factor=0.7):
-                touching = True
-                break
+        if self.freeze_time <= 0:  # frozen monsters do not hurt the player
+            for monster in self.monsters:
+                if self._overlap(self.player, monster, factor=0.7):
+                    touching = True
+                    break
         if not touching:
             for hazard in self.hazards:
                 if self._overlap(self.player, hazard, factor=0.6):
@@ -472,8 +583,8 @@ class GameScreen(Screen):
         buttons = [("Menu", [0.45, 0.45, 0.5, 1], lambda: app.go("levelselect"))]
         if next_index <= levels.NUM_LEVELS:
             buttons.append(("Next", [0.2, 0.7, 0.4, 1], lambda: app.start_level(next_index)))
-        lines = ["Score: {}".format(score), "Stars: {}".format("*" * stars)]
-        ResultOverlay("Level Clear!", lines, buttons).open()
+        lines = ["Score: {}".format(score)]
+        ResultOverlay("Level Clear!", lines, buttons, stars=stars).open()
 
     def _lose(self):
         if not self.active:

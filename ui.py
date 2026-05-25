@@ -4,6 +4,7 @@
 
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
+from kivy.uix.widget import Widget
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -12,9 +13,9 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.slider import Slider
 from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
-from kivy.graphics import Color, RoundedRectangle
+from kivy.graphics import Color, RoundedRectangle, Rectangle
 from kivy.metrics import sp, dp
-from kivy.properties import ListProperty
+from kivy.properties import ListProperty, NumericProperty, BooleanProperty
 
 import graphics
 import levels
@@ -192,11 +193,12 @@ class LevelSelectScreen(StyledScreen):
             index = lvl["index"]
             unlocked = running.state.is_unlocked(index)
             stars = running.state.get_stars(index)
-            # Show the world and level number on every button, locked or not.
+            # Show the world and level number on every button, locked or not, and
+            # draw real stars for the rating instead of asterisks.
             label = "W{} L{}".format(lvl["world"], lvl["world_index"])
             if unlocked:
-                text = label + ("\n" + "*" * stars if stars else "")
-                btn = StyledButton(text=text, bg=[0.25, 0.55, 0.9, 1], halign="center")
+                btn = LevelButton(text=label, bg=[0.25, 0.55, 0.9, 1])
+                btn.stars = stars
                 btn.bind(on_release=lambda b, i=index: running.start_level(i))
             else:
                 btn = StyledButton(text=label + "\nLocked", bg=[0.3, 0.3, 0.35, 1], halign="center")
@@ -294,3 +296,79 @@ class AboutScreen(StyledScreen):
 
     def on_enter(self):
         app().audio.play_menu_music()
+
+
+class GunButton(ButtonBehavior, Widget):
+    # The fire control, drawn as a blaster. Remaining ammo shows as bullet pips,
+    # and it greys out while on cooldown or out of ammo.
+    ammo = NumericProperty(0)
+    ready = BooleanProperty(True)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(pos=self._redraw, size=self._redraw, ammo=self._redraw, ready=self._redraw)
+        self._redraw()
+
+    def on_press(self):
+        running = app()
+        if running is not None and getattr(running, "audio", None):
+            running.audio.play_sfx("click")
+
+    def _redraw(self, *args):
+        x, y = self.pos
+        w, h = self.size
+        enabled = self.ready and self.ammo > 0
+        self.canvas.before.clear()
+        with self.canvas.before:
+            if enabled:
+                Color(0.90, 0.45, 0.18, 0.95)
+            else:
+                Color(0.40, 0.40, 0.45, 0.55)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(14)])
+            gun = (1, 1, 1, 1) if enabled else (0.75, 0.75, 0.78, 0.6)
+            Color(*gun)
+            bx, by = x + w * 0.20, y + h * 0.46
+            Rectangle(pos=(bx, by), size=(w * 0.42, h * 0.20))                       # body
+            Rectangle(pos=(bx + w * 0.40, by + h * 0.04), size=(w * 0.26, h * 0.12))  # barrel
+            Rectangle(pos=(bx + w * 0.06, by - h * 0.22), size=(w * 0.14, h * 0.24))  # grip
+            count = max(0, int(self.ammo))
+            pip_w = w * 0.11
+            gap = w * 0.03
+            total = count * pip_w + max(0, count - 1) * gap
+            start = x + (w - total) / 2
+            for i in range(count):
+                Color(1, 0.9, 0.3, 1)
+                Rectangle(pos=(start + i * (pip_w + gap), y + h * 0.12), size=(pip_w, h * 0.10))
+
+
+class LevelButton(StyledButton):
+    # A level tile that shows its label at the top and a real 3-star rating drawn
+    # at the bottom (gold for earned stars, faint for the rest).
+    stars = NumericProperty(0)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("halign", "center")
+        kwargs.setdefault("valign", "top")
+        super().__init__(**kwargs)
+        self.bind(stars=self._draw_stars, pos=self._draw_stars, size=self._on_size)
+        self._on_size()
+
+    def _on_size(self, *args):
+        self.text_size = (self.width, self.height)
+        self._draw_stars()
+
+    def _draw_stars(self, *args):
+        self.canvas.after.clear()
+        if self.width <= 1:
+            return
+        x, y = self.pos
+        w, h = self.size
+        slot = w * 0.24
+        outer = slot * 0.40
+        start = x + (w - slot * 3) / 2
+        cy = y + h * 0.18
+        with self.canvas.after:
+            for i in range(3):
+                cx = start + slot * (i + 0.5)
+                color = (1.0, 0.85, 0.2, 1) if i < self.stars else (1.0, 1.0, 1.0, 0.22)
+                graphics.draw_star(cx, cy, outer, color)

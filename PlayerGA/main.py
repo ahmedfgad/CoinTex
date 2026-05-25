@@ -1,636 +1,263 @@
-import kivy.app
-import kivy.uix.screenmanager
-import kivy.uix.image
-import random
-import kivy.core.audio
+# Game playing agent for CoinTex using a genetic algorithm.
+#
+# This does not copy the game. It reuses the main CoinTex engine that lives one
+# folder up (main.py, levels.py, graphics.py, audio.py, state.py, ui.py) and
+# adds an agent that plays a level on its own.
+#
+# How the agent works:
+#   The genes of a solution are a target point [x, y] in the 0..1 play area.
+#   The fitness rewards a target that is close to the nearest coin and away from
+#   monsters and fire. After each generation the best target is sent to the
+#   player so it walks there, and the search runs again from the new position.
+#   When a monster gets close the agent shoots it with the limited ammo.
+#
+# Run it with the project's Python after installing PyGAD:
+#   python PlayerGA/main.py
+
 import os
-import functools
-import kivy.uix.behaviors
-import pickle
-import pygad
+import sys
+import time
 import threading
-import kivy.base
 
-class CollectCoinThread(threading.Thread):
+# The engine is in the parent folder, so put that folder on the import path.
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
 
-    def __init__(self, screen):
-        super().__init__()
-        self.screen = screen
+import pygad
 
-    def run(self):
-        ga_instance = pygad.GA(num_generations=9999,
-                               num_parents_mating=300, 
-                               fitness_func=fitness_func,
-                               sol_per_pop=1000, 
-                               num_genes=2,
-                               init_range_low=0.0,
-                               init_range_high=1.0,
-                               random_mutation_min_val=0.0,
-                               random_mutation_max_val=1.0,
-                               mutation_by_replacement=True,
-                               callback_generation=callback_generation,
-                               delay_after_gen=self.screen.char_anim_duration)
-        ga_instance.run()
+from kivy.clock import Clock
 
-def fitness_func(solution, solution_idx):
-    curr_screen = app.root.screens[lvl_num]
+import main as engine
+import levels
 
-    coins = curr_screen.coins_ids
-    if len(coins.items()) == 0:
-        return 0
+# How long to wait between two searches. It paces the agent so it picks a new
+# target a few times per second instead of as fast as the CPU allows.
+RETARGET_DELAY = 0.15
+# Shoot when the nearest monster is within this distance of the player.
+FIRE_RANGE = 0.22
 
-    curr_coin = coins[list(coins.keys())[0]]
+# Safety is the agent's main concern. It keeps away from monsters and fire and
+# only goes for a coin when it can do so without risking its health.
+# Coin pull is kept fairly weak so safety wins whenever the two disagree, but
+# strong enough that the agent still darts in to grab a coin when a gap opens.
+COIN_WEIGHT = 2.0
+# Keep at least this much clearance from each monster and fire. A path that stays
+# clear is rewarded; one that comes closer is punished, harder the closer it gets.
+# The radius sits well above the contact range, so the agent avoids being hit but
+# can still slip through a gap to reach a coin.
+SAFE_RADIUS = 0.16
+SAFE_CLEAR_BONUS = 80.0
+SAFE_HIT_PENALTY = 350.0
+# When a danger is already this close to the player, also reward moving away from
+# it. The path measure cannot tell escape routes apart when the danger sits right
+# on the player, so this gives a clear direction to flee.
+FLEE_RADIUS = 0.18
+FLEE_WEIGHT = 40.0
+# Mild preference for shorter moves so the agent grabs near coins first.
+NEAR_PLAYER_WEIGHT = 3.0
+# Genetic algorithm size. The problem has only two genes, so a small population
+# is plenty.
+POPULATION = 200
+PARENTS = 50
+GENERATIONS = 100000
 
-    curr_coin_center = [curr_coin.pos_hint['x'], curr_coin.pos_hint['y']]
 
-    output = abs(solution[0] - curr_coin_center[0]) + abs(solution[1] - curr_coin_center[1])
-    output = 1.0 / output
+def _point_segment_distance(px, py, ax, ay, bx, by):
+    # Shortest distance from the point (px, py) to the line segment that runs
+    # from A (ax, ay) to B (bx, by). Used to measure how close a monster or fire
+    # is to the path the player would walk to reach a target.
+    abx, aby = bx - ax, by - ay
+    length_sq = abx * abx + aby * aby
+    if length_sq == 0.0:
+        t = 0.0
+    else:
+        t = ((px - ax) * abx + (py - ay) * aby) / length_sq
+        t = max(0.0, min(1.0, t))
+    closest_x = ax + t * abx
+    closest_y = ay + t * aby
+    return ((px - closest_x) ** 2 + (py - closest_y) ** 2) ** 0.5
 
-    monsters_pos = []
-    for i in range(curr_screen.num_monsters):
-        monster_image = curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(lvl_num)]
-        monsters_pos.append([monster_image.pos_hint['x'], monster_image.pos_hint['y']])
 
-    for monst_pos in monsters_pos:
-        char_monst_h_distance = abs(solution[0] - monst_pos[0])
-        char_monst_v_distance = abs(solution[1] - monst_pos[1])
-        if char_monst_h_distance <= 0.3 and char_monst_v_distance <= 0.3:
-            output -= 300
-        else:
-            output += 100
+class GameAgent:
+    # Drives the player on the current game screen with a genetic algorithm.
 
-    fires_pos = []
-    for i in range(curr_screen.num_fires):
-        fire_image = curr_screen.ids['fire'+str(i+1)+'_lvl'+str(lvl_num)]
-        fires_pos.append([fire_image.pos_hint['x'], fire_image.pos_hint['y']])
+    def __init__(self, app):
+        self.app = app
+        self._thread = None
+        self._stop = False
+        self._snapshot = None
 
-    for fire_pos in fires_pos:
-        char_fire_h_distance = abs(solution[0] - fire_pos[0])
-        char_fire_v_distance = abs(solution[1] - fire_pos[1])
-        if char_fire_h_distance <= 0.3 and char_fire_v_distance <= 0.3:
-            output -= 300
-        else:
-            output += 100
+    def start(self):
+        # Stop a previous run first, then play the level that is loaded now.
+        self.stop()
+        self._stop = False
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
 
-    fitness = output
-    return fitness
+    def stop(self):
+        self._stop = True
+        thread = self._thread
+        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+        self._thread = None
 
-last_fitness = 0
-def callback_generation(ga_instance):
-    global last_fitness
-    
-    best_sol_fitness = ga_instance.best_solution()[1]
-    fitness_change = best_sol_fitness - last_fitness
-    curr_screen = app.root.screens[lvl_num]
+    def _run(self):
+        self._sense()  # take a first reading before the search starts
+        ga = pygad.GA(num_generations=GENERATIONS,
+                      num_parents_mating=PARENTS,
+                      fitness_func=self._fitness,
+                      sol_per_pop=POPULATION,
+                      num_genes=2,
+                      init_range_low=0.0,
+                      init_range_high=1.0,
+                      # The coin to reach keeps moving as coins are collected and
+                      # the player walks, so this is not a fixed problem. Mutate
+                      # each gene with a real chance and drop a mutated gene
+                      # anywhere in the play area so the search keeps exploring.
+                      mutation_type="random",
+                      mutation_probability=0.3,
+                      mutation_by_replacement=True,
+                      random_mutation_min_val=0.0,
+                      random_mutation_max_val=1.0,
+                      # Do not carry solutions over with a cached score. The score
+                      # of a point changes every step, so every solution must be
+                      # measured again each generation or the agent locks onto an
+                      # old target.
+                      keep_elitism=0,
+                      keep_parents=0,
+                      on_generation=self._on_generation,
+                      suppress_warnings=True)
+        ga.run()
 
-    last_fitness = best_sol_fitness
-
-    coins = curr_screen.coins_ids
-
-    if len(coins.items()) == 0 or curr_screen.character_killed:
-        # After either the level is completed or the character is killed, then stop the GA by returning the string "stop".
-        return "stop"
-    elif len(coins.items()) != 0 and fitness_change != 0:
-        best_sol = ga_instance.best_solution()[0]
-        app.start_char_animation(lvl_num, [float(best_sol[0]),  float(best_sol[1])])
-
-#    print("Generation  = {generation}".format(generation=ga_instance.generations_completed))
-#    print("Fitness     = {fitness}".format(fitness=ga_instance.best_solution()[1]))
-#    print("Change     = {change}".format(change=fitness_change))
-
-class CointexApp(kivy.app.App):
-
-    def on_start(self):
-        music_dir = os.getcwd()+"/music/"
-        self.main_bg_music = kivy.core.audio.SoundLoader.load(music_dir+"bg_music_piano_flute.wav")
-        self.main_bg_music.loop = True
-        self.main_bg_music.play()
-
-        next_level_num, congrats_displayed_once = self.read_game_info()
-        self.activate_levels(next_level_num, congrats_displayed_once)
-
-    def read_game_info(self):
-        return 24, True
-
-    def activate_levels(self, next_level_num, congrats_displayed_once):
-        num_levels = len(self.root.screens[0].ids['lvls_imagebuttons'].children)
-
-        levels_imagebuttons = self.root.screens[0].ids['lvls_imagebuttons'].children
-        for i in range(num_levels-next_level_num, num_levels):
-            levels_imagebuttons[i].disabled = False
-            levels_imagebuttons[i].color = [1,1,1,1]
-
-        for i in range(0, num_levels-next_level_num):
-            levels_imagebuttons[i].disabled = True
-            levels_imagebuttons[i].color = [1,1,1,0.5]
-
-        if next_level_num == (num_levels+1) and congrats_displayed_once == False:
-            self.root.current = "alllevelscompleted"
-
-    def screen_on_pre_leave(self, screen_num):
-        curr_screen = self.root.screens[screen_num]
-        for i in range(curr_screen.num_monsters): curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)].pos_hint = {'x': 0.8, 'y': 0.8}
-        curr_screen.ids['character_image_lvl'+str(screen_num)].pos_hint = {'x': 0.0, 'y': 0.0}
-
-        next_level_num, congrats_displayed_once = self.read_game_info()
-        self.activate_levels(next_level_num, congrats_displayed_once)
-
-    def screen_on_pre_enter(self, screen_num):
-        curr_screen = self.root.screens[screen_num]
-        curr_screen.character_killed = False
-        curr_screen.num_coins_collected = 0
-        curr_screen.ids['character_image_lvl'+str(screen_num)].im_num = curr_screen.ids['character_image_lvl'+str(screen_num)].start_im_num
-        for i in range(curr_screen.num_monsters): curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)].im_num = curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)].start_im_num
-        curr_screen.ids['num_coins_collected_lvl'+str(screen_num)].text = "Coins 0/"+str(curr_screen.num_coins)
-        curr_screen.ids['level_number_lvl'+str(screen_num)].text = "Level "+str(screen_num)
-
-        curr_screen.num_collisions_hit = 0
-        remaining_life_percent_lvl_widget = curr_screen.ids['remaining_life_percent_lvl'+str(screen_num)]
-        remaining_life_percent_lvl_widget.size_hint = (remaining_life_percent_lvl_widget.remaining_life_size_hint_x, remaining_life_percent_lvl_widget.size_hint[1])
-
-        for i in range(curr_screen.num_fires): curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)].pos_hint = {'x': 1.1, 'y': 1.1}
-
-        for key, coin in curr_screen.coins_ids.items():
-            curr_screen.ids['layout_lvl'+str(screen_num)].remove_widget(coin)
-        curr_screen.coins_ids = {}
-
-        coin_width = 0.05
-        coin_height = 0.05
-
-        curr_screen = self.root.screens[screen_num]
-
-        section_width = 1.0/curr_screen.num_coins
-        for k in range(curr_screen.num_coins):
-            x = random.uniform(section_width*k, section_width*(k+1)-coin_width)
-            y = random.uniform(0, 1-coin_height)
-            coin = kivy.uix.image.Image(source="other-images/coin.png", size_hint=(coin_width, coin_height), pos_hint={'x': x, 'y': y}, allow_stretch=True)
-            curr_screen.ids['layout_lvl'+str(screen_num)].add_widget(coin, index=-1)
-            curr_screen.coins_ids['coin'+str(k)] = coin
-
-    def screen_on_enter(self, screen_num):
-        music_dir = os.getcwd()+"/music/"
-        self.bg_music = kivy.core.audio.SoundLoader.load(music_dir+"bg_music_piano.wav")
-        self.bg_music.loop = True
-
-        self.coin_sound = kivy.core.audio.SoundLoader.load(music_dir+"coin.wav")
-        self.level_completed_sound = kivy.core.audio.SoundLoader.load(music_dir+"level_completed_flaute.wav")
-        self.char_death_sound = kivy.core.audio.SoundLoader.load(music_dir+"char_death_flaute.wav")
-
-        self.bg_music.play()
-
-        curr_screen = self.root.screens[screen_num]
-        for i in range(curr_screen.num_monsters): 
-            monster_image = curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)]
-            new_pos = (random.uniform(0.0, 1 - monster_image.size_hint[0]/4), random.uniform(0.0, 1 - monster_image.size_hint[1]/4))
-            self.start_monst_animation(monster_image=monster_image, new_pos=new_pos, anim_duration=random.uniform(monster_image.monst_anim_duration_low, monster_image.monst_anim_duration_high))
-
-        for i in range(curr_screen.num_fires): 
-            fire_widget = curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)]
-            self.start_fire_animation(fire_widget=fire_widget, pos=(0.0, 0.5), anim_duration=5.0)
-
-        global lvl_num
-
-        lvl_num = screen_num
-
-        collectCoinThread = CollectCoinThread(screen=curr_screen)
-        collectCoinThread.start()
-
-    def start_monst_animation(self, monster_image, new_pos, anim_duration):
-        monst_anim = kivy.animation.Animation(pos_hint={'x': new_pos[0], 'y': new_pos[1]}, im_num=monster_image.end_im_num, duration=anim_duration)
-        monst_anim.bind(on_complete=self.monst_animation_completed)
-        monst_anim.start(monster_image)
-
-    def monst_animation_completed(self, *args):
-        monster_image = args[1]
-        monster_image.im_num = monster_image.start_im_num
-
-        new_pos = (random.uniform(0.0, 1 - monster_image.size_hint[0]/4), random.uniform(0.0, 1 - monster_image.size_hint[1]/4))
-        self.start_monst_animation(monster_image=monster_image, new_pos= new_pos,anim_duration=random.uniform(monster_image.monst_anim_duration_low, monster_image.monst_anim_duration_high))
-
-    def monst_pos_hint(self, monster_image):
-        screen_num = int(monster_image.parent.parent.name[5:])
-        curr_screen = self.root.screens[screen_num]
-        character_image = curr_screen.ids['character_image_lvl'+str(screen_num)]
-
-        character_center = character_image.center
-        monster_center = monster_image.center
-
-        gab_x = character_image.width / 2
-        gab_y = character_image.height / 2
-        if character_image.collide_widget(monster_image) and abs(character_center[0] - monster_center[0]) <= gab_x and abs(character_center[1] - monster_center[1]) <= gab_y:
-            curr_screen.num_collisions_hit = curr_screen.num_collisions_hit + 1
-            life_percent = float(curr_screen.num_collisions_hit)/float(curr_screen.num_collisions_level)
-
-#            life_remaining_percent = 100-round(life_percent, 2)*100
-#            remaining_life_percent_lvl_widget.text = str(int(life_remaining_percent))+"%"
-            remaining_life_percent_lvl_widget=curr_screen.ids['remaining_life_percent_lvl'+str(screen_num)]
-            remaining_life_size_hint_x = remaining_life_percent_lvl_widget.remaining_life_size_hint_x
-            remaining_life_percent_lvl_widget.size_hint =  (remaining_life_size_hint_x-remaining_life_size_hint_x*life_percent, remaining_life_percent_lvl_widget.size_hint[1])
-
-            if curr_screen.num_collisions_hit == curr_screen.num_collisions_level:
-                self.bg_music.stop()
-                self.char_death_sound.play()
-                curr_screen.character_killed = True
-
-                kivy.animation.Animation.cancel_all(character_image)
-                for i in range(curr_screen.num_monsters): kivy.animation.Animation.cancel_all(curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)])
-                for i in range(curr_screen.num_fires): kivy.animation.Animation.cancel_all(curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)])
-
-                character_image.im_num = character_image.dead_start_im_num
-                char_anim = kivy.animation.Animation(im_num=character_image.dead_end_im_num, duration=1.0)
-                char_anim.start(character_image)
-                kivy.clock.Clock.schedule_once(functools.partial(self.back_to_main_screen, curr_screen.parent), 3)
-
-    def change_monst_im(self, monster_image):
-        monster_image.source = "monsters-images/" + str(int(monster_image.im_num)) + ".png"
-
-    def touch_down_handler(self, screen_num, args):
-        curr_screen = self.root.screens[screen_num]
-        if curr_screen.character_killed == False:
-            self.start_char_animation(screen_num, args[1].spos)
-
-    def start_char_animation(self, screen_num, touch_pos):
-        curr_screen = self.root.screens[screen_num]
-        if curr_screen.character_killed:
+    def _sense(self):
+        # Read the level into a small snapshot. The search runs in this thread
+        # while the game updates in the main thread, so we copy the positions
+        # once per generation instead of touching the live widgets many times.
+        game = self.app.game
+        player = None if game is None else game.player
+        if game is None or player is None or not game.active:
+            self._snapshot = None
             return
 
-        character_image = curr_screen.ids['character_image_lvl'+str(screen_num)]
-        character_image.im_num = character_image.start_im_num
-        char_anim = kivy.animation.Animation(pos_hint={'x': touch_pos[0] - character_image.size_hint[0] / 2,'y': touch_pos[1] - character_image.size_hint[1] / 2}, im_num=character_image.end_im_num, duration=curr_screen.char_anim_duration)
-        char_anim.bind(on_complete=self.char_animation_completed)
-        char_anim.start(character_image)
+        px, py = player.cx, player.cy
+        coins = [(c.cx, c.cy) for c in list(game.coins)]
 
-    def char_animation_completed(self, *args):
-        character_image = args[1]
-        character_image.im_num = character_image.start_im_num
+        # Things to stay away from. Frozen monsters cannot hurt the player, so
+        # they are left out while a freeze is active.
+        danger = [(h.cx, h.cy) for h in list(game.hazards)]
+        if game.freeze_time <= 0:
+            danger += [(m.cx, m.cy) for m in list(game.monsters)]
 
-    def char_pos_hint(self, character_image):
-        screen_num = int(character_image.parent.parent.name[5:])
-        character_center = character_image.center
+        monsters = [(m.cx, m.cy) for m in list(game.monsters)]
+        if monsters:
+            nearest_monster = min(((m[0] - px) ** 2 + (m[1] - py) ** 2) ** 0.5 for m in monsters)
+        else:
+            nearest_monster = None
 
-        gab_x = character_image.width / 3
-        gab_y = character_image.height / 3
-        coins_to_delete = []
-        curr_screen = self.root.screens[screen_num]
+        # The closest danger to the player. If it is within the flee range the
+        # agent should get away from it, even if that means leaving the coins
+        # for a moment.
+        flee_from = None
+        if danger:
+            closest = min(danger, key=lambda d: (d[0] - px) ** 2 + (d[1] - py) ** 2)
+            if ((closest[0] - px) ** 2 + (closest[1] - py) ** 2) ** 0.5 < FLEE_RADIUS:
+                flee_from = closest
 
-        for coin_key, curr_coin in curr_screen.coins_ids.items():
-            curr_coin_center = curr_coin.center
-            if character_image.collide_widget(curr_coin) and abs(character_center[0] - curr_coin_center[0]) <= gab_x and abs(character_center[1] - curr_coin_center[1]) <= gab_y: 
-                self.coin_sound.play()
-                coins_to_delete.append(coin_key)
-                curr_screen.ids['layout_lvl'+str(screen_num)].remove_widget(curr_coin)
-                curr_screen.num_coins_collected = curr_screen.num_coins_collected + 1
-                curr_screen.ids['num_coins_collected_lvl'+str(screen_num)].text = "Coins "+str(curr_screen.num_coins_collected)+"/"+str(curr_screen.num_coins)
-                if curr_screen.num_coins_collected == curr_screen.num_coins:
-                    self.bg_music.stop()
-                    self.level_completed_sound.play()
-                    kivy.clock.Clock.schedule_once(functools.partial(self.back_to_main_screen, curr_screen.parent), 3)
-                    for i in range(curr_screen.num_monsters): kivy.animation.Animation.cancel_all(curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)])
-                    for i in range(curr_screen.num_fires): kivy.animation.Animation.cancel_all(curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)])
+        self._snapshot = {
+            "coins": coins,
+            "danger": danger,
+            "player": (px, py),
+            "nearest_monster": nearest_monster,
+            "flee_from": flee_from,
+        }
 
-                    next_level_num, congrats_displayed_once = self.read_game_info()
-                    if (screen_num+1) > next_level_num:
-                        game_info_file = open("game_info",'wb')
-                        pickle.dump([{'lastlvl':screen_num+1, "congrats_displayed_once": False}], game_info_file)
-                        game_info_file.close()
-                    else:
-                        game_info_file = open("game_info",'wb')
-                        pickle.dump([{'lastlvl':next_level_num, "congrats_displayed_once": True}], game_info_file)
-                        game_info_file.close()
+    def _fitness(self, ga_instance, solution, solution_idx):
+        snapshot = self._snapshot
+        if snapshot is None or not snapshot["coins"]:
+            return 0.0
 
-        if len(coins_to_delete) > 0:
-            for coin_key in coins_to_delete:
-                del curr_screen.coins_ids[coin_key]
+        target_x, target_y = solution[0], solution[1]
+        player_x, player_y = snapshot["player"]
 
-    def change_char_im(self, character_image):
-        character_image.source = "character-images/" + str(int(character_image.im_num)) + ".png"
+        # Attraction toward the most reachable coin, the one closest to this
+        # target. It is weak so safety comes first.
+        best_pull = 0.0
+        for coin_x, coin_y in snapshot["coins"]:
+            distance = ((target_x - coin_x) ** 2 + (target_y - coin_y) ** 2) ** 0.5
+            pull = COIN_WEIGHT / (distance + 0.02)
+            if pull > best_pull:
+                best_pull = pull
+        score = best_pull
 
-    def start_fire_animation(self, fire_widget, pos, anim_duration):
-        fire_anim = kivy.animation.Animation(pos_hint=fire_widget.fire_start_pos_hint, duration=fire_widget.fire_anim_duration)+kivy.animation.Animation(pos_hint=fire_widget.fire_end_pos_hint, duration=fire_widget.fire_anim_duration)
-        fire_anim.repeat = True
-        fire_anim.start(fire_widget)
+        # Safety, the main driver. For every monster and fire, look at how close
+        # it comes to the straight path the player would walk to reach the target.
+        # Reward a path that stays clear and strongly punish one that comes too
+        # close, so the agent routes around danger and heads for safe ground
+        # instead of walking into it.
+        for danger_x, danger_y in snapshot["danger"]:
+            gap = _point_segment_distance(danger_x, danger_y,
+                                          player_x, player_y, target_x, target_y)
+            if gap >= SAFE_RADIUS:
+                score += SAFE_CLEAR_BONUS
+            else:
+                score -= SAFE_HIT_PENALTY * (1.0 - gap / SAFE_RADIUS)
 
-    def fire_pos_hint(self, fire_widget):
-        screen_num = int(fire_widget.parent.parent.name[5:])
-        curr_screen = self.root.screens[screen_num]
-        character_image = curr_screen.ids['character_image_lvl'+str(screen_num)]
+        # If a danger is right next to the player, also reward moving away from
+        # it so the agent flees instead of standing still and being hit.
+        flee_from = snapshot["flee_from"]
+        if flee_from is not None:
+            flee_x, flee_y = flee_from
+            away = ((target_x - flee_x) ** 2 + (target_y - flee_y) ** 2) ** 0.5
+            score += away * FLEE_WEIGHT
 
-        character_center = character_image.center
-        fire_center = fire_widget.center
+        # Mild preference for shorter moves so it grabs near coins first.
+        score -= (((target_x - player_x) ** 2 + (target_y - player_y) ** 2) ** 0.5) * NEAR_PLAYER_WEIGHT
+        return score
 
-        gab_x = character_image.width / 3
-        gab_y = character_image.height / 3
-        if character_image.collide_widget(fire_widget) and abs(character_center[0] - fire_center[0]) <= gab_x and abs(character_center[1] - fire_center[1]) <= gab_y:
-            curr_screen.num_collisions_hit = curr_screen.num_collisions_hit + 1
-            life_percent = float(curr_screen.num_collisions_hit)/float(curr_screen.num_collisions_level)
+    def _on_generation(self, ga_instance):
+        time.sleep(RETARGET_DELAY)
 
-            remaining_life_percent_lvl_widget = curr_screen.ids['remaining_life_percent_lvl'+str(screen_num)]
-#            life_remaining_percent = 100-round(life_percent, 2)*100
-#            remaining_life_percent_lvl_widget.text = str(int(life_remaining_percent))+"%"
+        game = self.app.game
+        player = None if game is None else game.player
+        if self._stop or game is None or player is None or not game.active or not game.coins:
+            return "stop"
 
-            remaining_life_size_hint_x = remaining_life_percent_lvl_widget.remaining_life_size_hint_x
-            remaining_life_percent_lvl_widget.size_hint =  (remaining_life_size_hint_x-remaining_life_size_hint_x*life_percent, remaining_life_percent_lvl_widget.size_hint[1])
+        best_solution = ga_instance.best_solution()[0]
+        player.tx = min(max(float(best_solution[0]), 0.05), 0.95)
+        player.ty = min(max(float(best_solution[1]), 0.05), 0.95)
 
-            if curr_screen.num_collisions_hit == curr_screen.num_collisions_level:
-                self.bg_music.stop()
-                self.char_death_sound.play()
-                curr_screen.character_killed = True
+        snapshot = self._snapshot
+        if (snapshot is not None and snapshot["nearest_monster"] is not None
+                and snapshot["nearest_monster"] <= FIRE_RANGE):
+            # Firing adds a widget, so it has to run in the main thread.
+            Clock.schedule_once(lambda dt: self._fire(), 0)
 
-                kivy.animation.Animation.cancel_all(character_image)
-                for i in range(curr_screen.num_monsters): kivy.animation.Animation.cancel_all(curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)])
-                for i in range(curr_screen.num_fires): kivy.animation.Animation.cancel_all(curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)])
+        self._sense()  # refresh for the next generation
 
-                character_image.im_num = character_image.dead_start_im_num
-                char_anim = kivy.animation.Animation(im_num=character_image.dead_end_im_num, duration=1.0)
-                char_anim.start(character_image)
-                kivy.clock.Clock.schedule_once(functools.partial(self.back_to_main_screen, curr_screen.parent), 3)
+    def _fire(self):
+        game = self.app.game
+        if game is not None and game.active:
+            game.fire()  # the engine checks ammo and cooldown and aims for us
 
-    def back_to_main_screen(self, screenManager, *args):
-        screenManager.current = "main"
 
-    def main_screen_on_enter(self):
-        self.main_bg_music.play()
+class GAApp(engine.CointexApp):
+    # The normal game, with the agent attached.
 
-    def main_screen_on_leave(self):
-        self.main_bg_music.stop()
+    def build(self):
+        screen_manager = super().build()
+        # Let the agent open any level for the demo. This stays in memory only,
+        # so the real game's saved progress is left untouched.
+        self.state.data["highest_unlocked"] = levels.NUM_LEVELS
+        self.state.save = lambda *args, **kwargs: None
+        self.agent = GameAgent(self)
+        return screen_manager
 
-class ImageButton(kivy.uix.behaviors.ButtonBehavior, kivy.uix.image.Image):  
-    pass
+    def start_level(self, index):
+        self.agent.stop()
+        super().start_level(index)
+        self.agent.start()
 
-class MainScreen(kivy.uix.screenmanager.Screen):
-    pass
 
-class AboutUs(kivy.uix.screenmanager.Screen):
-    pass
-
-class AllLevelsCompleted(kivy.uix.screenmanager.Screen):
-    pass
-
-class Level1(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 1
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level2(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 8
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 1
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level3(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 1
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level4(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 10
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 1
-    num_fires = 1
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level5(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 1
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level6(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 1
-    num_fires = 3
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level7(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 10
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 3
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 25
-
-class Level8(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 25
-
-class Level9(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 25
-
-class Level10(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 14
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 3
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level11(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 1
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level12(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 1
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level13(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 10
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level14(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 0
-    num_fires = 6
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level15(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 16
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 3
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level16(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 3
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 35
-
-class Level17(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 0
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level18(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 3
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level19(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 0
-    num_fires = 6
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level20(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 0
-    num_fires = 10
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level21(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 18
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level22(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.15
-    num_monsters = 4
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level23(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 25
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 2
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level24(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 0.25
-    num_monsters = 3
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-app = CointexApp()
-app.title = "CoinTex"
-app.icon = 'cointex_logo.png'
-app.run()
+if __name__ == "__main__":
+    GAApp().run()

@@ -1,1 +1,5 @@
-pygad
+# The agent reuses the main CoinTex game engine in the parent folder, so it
+# needs the same Kivy runtime. PyGAD provides the genetic algorithm (and pulls in
+# numpy on its own).
+kivy>=2.3.0
+pygad>=3.0

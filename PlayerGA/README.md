@@ -7,58 +7,72 @@ https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast&hl=en
 
 The only AI used to build the agent is the genetic algorithm (GA). There is no machine/deep learning model used. The [PyGAD](https://pygad.readthedocs.io) library is used to build the GA. 
 
+The agent does not have its own copy of the game. It reuses the main CoinTex
+engine in the parent folder (`main.py`, `levels.py`, `graphics.py`, `audio.py`,
+`state.py`, `ui.py`), so it always plays the current version of the game with all
+of its levels and graphics. The agent file `PlayerGA/main.py` only adds the
+genetic algorithm on top of that engine.
+
+# How the Agent Works
+
+The agent picks where the player should walk next and when to shoot.
+
+A solution in the genetic algorithm has two genes, an `[x, y]` target point in the
+play area (each value from 0 to 1). The fitness of a target is high when it is
+close to the nearest coin and lower when it sits on top of a monster or fire.
+After each generation the best target is sent to the player so it walks there,
+and the search runs again from the new position. Because coins are collected and
+the player keeps moving, the target keeps changing, so every solution is measured
+again each generation instead of being cached.
+
+When the nearest monster gets close, the agent fires at it. The game has a limited
+amount of ammo per level and aims the shot at the nearest monster on its own, so
+the agent only has to decide when to pull the trigger.
+
 # Installing PyGAD
 
 [PyGAD](https://pygad.readthedocs.io) is the library used for building the genetic algorithm (GA). Check the documentation at [Read the Docs](https://pygad.readthedocs.io) to get started.
 
-The minimum PyGAD version that works with this project is 2.4.0. A lower version does not support 2 features that are necessary in this work which are:
-
-1. The `delay_after_gen` parameter in the `pygad.GA` class's constructor that puts the GA into sleep for a number of seconds after each generation.
-2. The function passed to the `callback_generation` parameter of the `pygad.GA` class's constructor returns the string `stop` returned to stop the GA before visiting all the generations.
-
-[PyGAD](https://pygad.readthedocs.io) can be installed from [PyPI](https://pypi.org/project/pygad) using the `pip` installer. For Windows, use the following CMD command:
+This version of the project uses PyGAD 3. Install it from [PyPI](https://pypi.org/project/pygad) with `pip`:
 
 ```
 pip install pygad
 ```
 
-For Linux and Mac, replace `pip`  by `pip3` because PyGAD uses Python 3:
+For Linux and Mac, replace `pip` by `pip3` because PyGAD uses Python 3:
 
 ```
 pip3 install pygad
 ```
 
-Once being installed, make sure it works well by importing it. The latest version at the time of writing this tutorial is **2.4.0** or higher. 
+The agent also needs the same Kivy runtime as the game. Installing the project
+requirements covers both:
 
-```python
-import pygad
-
-print(pygad.__version__)
+```
+pip install -r PlayerGA/requirements.txt
 ```
 
 # Run the Project
 
-To run the project, just run the `main.py` file.
+Run the agent file from the root of the CoinTex project so it can find the engine
+in the parent folder.
 
 In Windows, use this CMD command:
 
 ```
-python main.py
+python PlayerGA/main.py
 ```
 
 For Linux/Mac, use `python3` rather than `python`:
 
 ```
-python3 main.py
+python3 PlayerGA/main.py
 ```
 
-A window appears like the shows below. Normally, the game only activates the levels that the user completed successfully plus 1 more level. Specially for this project, all the levels are activated. 
-
-![CoinTex-2020-07-06_15-34-51](https://user-images.githubusercontent.com/16560492/86599324-c50e2d00-bf9e-11ea-8801-51f2b41c4f4f.jpg)
-
-After the main screen of the app appears, select any of the activated levels and the agent will play it automatically [hoping to pass the level successfully].
-
-![2020-07-05_19-59-17](https://user-images.githubusercontent.com/16560492/86600094-dad02200-bf9f-11ea-9513-5b57739b0f58.gif)
+The normal game menu appears. For this project all of the levels are unlocked so
+the agent can play any of them, and this does not change your saved progress in
+the real game. Open Play, pick a world and a level, and the agent takes over and
+plays it on its own.
 
 This is a video showing how the agent is able to pass multiple levels in CoinTex with varying complexity: https://www.youtube.com/embed/Sp_0RGjaL-0
 

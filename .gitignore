@@ -19,11 +19,6 @@ bin/
 .ios-venv/
 CoinTex-ios/
 
-# PyInstaller desktop build output (build_desktop.sh)
-build/
-dist/
-*.spec
-
 # Candidate/alternative audio (dev scratch, reproducible via tools/gen_assets.py)
 audio_alternatives/
 

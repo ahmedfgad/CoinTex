@@ -1260,12 +1260,7 @@ class GameScreen(Screen):
 class CointexApp(kivy.app.App):
     def build(self):
         self.title = "CoinTex"
-        # When packaged with PyInstaller the bundled files (music) live in a temp
-        # folder pointed to by sys._MEIPASS; otherwise they sit next to this file.
-        if getattr(sys, "frozen", False):
-            app_dir = sys._MEIPASS
-        else:
-            app_dir = os.path.dirname(os.path.abspath(__file__))
+        app_dir = os.path.dirname(os.path.abspath(__file__))
         legacy = os.path.join(app_dir, "game_info")
         self.state = GameState(self.user_data_dir, legacy_game_info=legacy)
         self.audio = AudioManager(os.path.join(app_dir, "music"), self.state.get_setting)

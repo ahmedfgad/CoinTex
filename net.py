@@ -18,6 +18,7 @@ import socket
 import struct
 import threading
 import queue
+import urllib.request
 
 DEFAULT_PORT = 50007
 PROTOCOL_VERSION = 1
@@ -46,6 +47,30 @@ def get_local_ip():
     finally:
         probe.close()
     return ip
+
+
+# Services that report back the caller's internet-facing IP address. Used only
+# to help set up internet play (the host needs to share this address).
+PUBLIC_IP_SERVICES = ("https://api.ipify.org", "https://ifconfig.me/ip",
+                      "http://icanhazip.com")
+
+
+def get_public_ip(timeout=4.0):
+    # Ask a public service for this device's internet-facing IP. Returns the IP
+    # as a string, or None if there is no internet or no service answered. This
+    # makes one outbound request and reveals this device's IP to that service,
+    # so it is only called when the user opens the Host screen. This is blocking,
+    # so call it from a background thread.
+    for url in PUBLIC_IP_SERVICES:
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                text = response.read().decode("utf-8").strip()
+        except Exception:
+            continue
+        parts = text.split(".")
+        if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+            return text
+    return None
 
 
 def _recv_loop(sock, inbox, on_closed):
@@ -135,13 +160,15 @@ class NetHost(_Link):
         self.port = port
         self.connected = False
         self._server = None
+        self._accept_thread = None
 
     def start_listening(self):
         self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server.bind(("0.0.0.0", self.port))
         self._server.listen(1)
-        threading.Thread(target=self._accept_loop, daemon=True).start()
+        self._accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
+        self._accept_thread.start()
 
     def _accept_loop(self):
         server = self._server
@@ -179,13 +206,29 @@ class NetHost(_Link):
                    "mode": mode, "level": level, "seed": seed})
 
     def stop(self):
+        # Safe to call more than once.
+        self._closed = True
         server = self._server
-        self._server = None
         if server is not None:
+            # The accept thread may be blocked waiting for a player. Closing the
+            # socket from another thread does not free the port while accept is
+            # blocked, so we connect to ourselves to wake it. It then sees we are
+            # closing and returns, which releases the port.
+            try:
+                waker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                waker.settimeout(0.5)
+                waker.connect(("127.0.0.1", self.port))
+                waker.close()
+            except Exception:
+                pass
             try:
                 server.close()
             except Exception:
                 pass
+            self._server = None
+        thread = self._accept_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=1.0)
         super().stop()
 
 

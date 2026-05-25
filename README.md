@@ -86,7 +86,7 @@ Two people can play together over the network. From the main menu open Multiplay
 
 There are two game types, chosen by the host. In Co-op you share one goal and clear all the coins together before the timer runs out. In Versus you race for the same coins and whoever collects the most wins.
 
-The simplest setup is two devices on the same Wi-Fi, where the host's address is a local one like 192.168.x.x. Playing across the internet works too, but the host has to forward TCP port 50007 on their router to their device, since the connection is made straight to the host. The networking uses only the Python standard library, so it adds no extra packages to the build.
+The Host screen shows two addresses. The same-Wi-Fi address (like 192.168.x.x) is for two devices on the same network and needs no setup. The internet address is the host's public IP; to use it the host must forward TCP port 50007 on their router to their device, because the connection is made straight to the host. The joining player types whichever address fits, into the same field. The networking uses only the Python standard library, so it adds no extra packages to the build.
 
 ## Screenshots
 

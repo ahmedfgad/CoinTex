@@ -4,6 +4,7 @@
 
 import math
 import random
+import threading
 
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
@@ -912,16 +913,23 @@ class HostScreen(StyledScreen):
         self._poll = None
         self._ready = False
         self._handed_off = False
-        box = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(12),
-                        size_hint=(0.82, 0.92), pos_hint={"center_x": 0.5, "center_y": 0.5})
-        box.add_widget(Label(text="Host a Game", font_size=sp(34), bold=True,
-                             color=[1, 1, 1, 1], size_hint_y=0.12))
+        self._ip_token = 0
+        box = BoxLayout(orientation="vertical", padding=dp(20), spacing=dp(10),
+                        size_hint=(0.86, 0.94), pos_hint={"center_x": 0.5, "center_y": 0.5})
+        box.add_widget(Label(text="Host a Game", font_size=sp(30), bold=True,
+                             color=[1, 1, 1, 1], size_hint_y=0.1))
         self.addr_label = Label(text="", font_size=sp(20), bold=True, color=[0.6, 0.95, 1, 1],
-                                halign="center", valign="middle", size_hint_y=0.16)
+                                halign="center", valign="middle", size_hint_y=0.13)
         self.addr_label.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
         box.add_widget(self.addr_label)
+        # Help for playing across the internet (the local address only works on
+        # the same Wi-Fi). Filled in once the public address is looked up.
+        self.inet_label = Label(text="", font_size=sp(14), color=[1, 1, 1, 0.85],
+                                halign="center", valign="middle", size_hint_y=0.16)
+        self.inet_label.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
+        box.add_widget(self.inet_label)
         box.add_widget(Label(text="Game type", font_size=sp(18), bold=True,
-                             size_hint_y=0.08, color=[1, 1, 1, 1]))
+                             size_hint_y=0.07, color=[1, 1, 1, 1]))
         self.mode_btns = {}
         row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=0.14)
         for key, label in self.MODES:
@@ -952,14 +960,43 @@ class HostScreen(StyledScreen):
         self.net = net.NetHost()
         try:
             self.net.start_listening()
-            self.addr_label.text = "Your address\n{}   port {}".format(
+            self.addr_label.text = "Same Wi-Fi address\n{}   port {}".format(
                 net.get_local_ip(), self.net.port)
+            # Look up the internet address in the background so the UI never
+            # blocks waiting on the network.
+            self.inet_label.text = "Checking your internet address..."
+            self._ip_token += 1
+            token = self._ip_token
+            port = self.net.port
+            threading.Thread(target=self._fetch_public_ip, args=(token, port),
+                             daemon=True).start()
         except Exception as error:
             self.addr_label.text = "Could not start hosting."
+            self.inet_label.text = ""
             self.status.text = str(error)
         self._poll = Clock.schedule_interval(self._check, 0.2)
 
+    def _fetch_public_ip(self, token, port):
+        ip = net.get_public_ip()
+        Clock.schedule_once(lambda dt: self._show_public_ip(token, port, ip), 0)
+
+    def _show_public_ip(self, token, port, ip):
+        # Ignore a result that arrives after the screen was left or re-entered.
+        if token != self._ip_token:
+            return
+        if ip:
+            self.inet_label.text = (
+                "Internet play: forward TCP port {} on your router,\n"
+                "then give the other player this address:\n"
+                "{}   port {}".format(port, ip, port))
+        else:
+            self.inet_label.text = (
+                "Internet play: forward TCP port {} on your router\n"
+                "and share your public IP address.".format(port))
+
     def on_leave(self):
+        # Bumping the token makes any in-flight public-IP lookup discard itself.
+        self._ip_token += 1
         if self._poll is not None:
             self._poll.cancel()
             self._poll = None
@@ -1030,9 +1067,10 @@ class JoinScreen(StyledScreen):
                         size_hint=(0.82, 0.82), pos_hint={"center_x": 0.5, "center_y": 0.5})
         box.add_widget(Label(text="Join a Game", font_size=sp(34), bold=True,
                              color=[1, 1, 1, 1], size_hint_y=0.16))
-        prompt = Label(text="Type the host's address (shown on the host's screen):",
+        prompt = Label(text="Type the host's address (shown on the host's screen).\n"
+                            "It can be a same-Wi-Fi address or a public internet one.",
                        font_size=sp(16), color=[1, 1, 1, 0.9], halign="center",
-                       valign="middle", size_hint_y=0.14)
+                       valign="middle", size_hint_y=0.16)
         prompt.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
         box.add_widget(prompt)
         self.ip_input = TextInput(text="", multiline=False, font_size=sp(22),

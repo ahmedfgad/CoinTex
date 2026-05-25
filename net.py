@@ -137,6 +137,10 @@ class _Link:
         except Exception:
             self._on_closed()
 
+    def send_leave(self):
+        # Either side can tell the other it is leaving the game.
+        self.send({"t": "leave"})
+
     def stop(self):
         # Safe to call more than once.
         self._closed = True
@@ -260,6 +264,3 @@ class NetClient(_Link):
     def send_input(self, tx, ty, fire=False):
         self.send({"t": "input", "tx": round(tx, 4), "ty": round(ty, 4),
                    "fire": bool(fire)})
-
-    def send_leave(self):
-        self.send({"t": "leave"})

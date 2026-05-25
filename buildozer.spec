@@ -55,7 +55,7 @@ android.accept_sdk_license = True
 
 # Release file to build: aab or apk. The Play Store upload uses the aab.
 # build_android.sh switches this when it also builds the apk for testing.
-android.release_artifact = aab
+android.release_artifact = apk
 
 # Version code. It must be higher than the version code already on Google Play,
 # or the upload is rejected. Check the current value in Play Console under

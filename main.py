@@ -218,11 +218,23 @@ class GameScreen(Screen):
             coin.start()
             self.coins.append(coin)
 
-        # hazards sweep between two points
+        # Fires sweep all the way across the screen along a random line, either
+        # left to right or top to bottom. The line position is random but the
+        # sweep is full width or full height, so a fire never sits still on a coin
+        # and instead passes over it. That keeps the screen fair to cross and
+        # means no coin is ever blocked for good.
         for i in range(self.level["fires"]):
             hazard = graphics.Hazard(size_hint=HAZARD_SIZE)
-            hazard.ax, hazard.ay = random.uniform(0.1, 0.9), random.uniform(0.15, 0.85)
-            hazard.bx, hazard.by = random.uniform(0.1, 0.9), random.uniform(0.15, 0.85)
+            if random.random() < 0.5:
+                # horizontal sweep across x at a fixed random height
+                y = random.uniform(0.18, 0.85)
+                hazard.ax, hazard.ay = 0.08, y
+                hazard.bx, hazard.by = 0.92, y
+            else:
+                # vertical sweep up and down at a fixed random column
+                x = random.uniform(0.08, 0.92)
+                hazard.ax, hazard.ay = x, 0.12
+                hazard.bx, hazard.by = x, 0.9
             hazard.t = random.uniform(0, 1)
             hazard.period = self.level["fire_speed"]
             hazard.cx, hazard.cy = hazard.ax, hazard.ay

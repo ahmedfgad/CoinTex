@@ -16,12 +16,15 @@
 #   fire count      : 1  ->   2   (capped low on purpose)
 #   monster speed   : slow -> fast (move duration 2.0s -> ~0.8s, lower is faster)
 #   fire speed      : slow -> fast (sweep duration 6.0s -> 2.0s)
-#   enemy speed mult: 1.0 -> 1.6  (extra speed on top, capped so chasers stay escapable)
-#   chase range/time: 0 -> monsters lock onto and chase the player when near
-#   fire pulse      : 0 -> fires grow and shrink, so the danger zone breathes
-#   contact damage  : 45 -> 120 dps (less forgiving with depth)
+#   enemy speed mult: world 2+, 1.0 -> 1.4 (capped so chasers stay escapable)
+#   fire pulse      : world 3+, fires grow and shrink so the danger zone breathes
+#   chase range/time: world 4+, the nearest monster locks on and chases the player
+#   gun reload      : world 4+, the gun refills itself after the ammo runs out
+#   contact damage  : world 5+, 50 -> 70 dps (the late game is less forgiving)
 #   player health   : 60 -> 30
 #   time limit      : every level is timed; generous early, tight late
+# Each world introduces one new mechanic, shown to the player with a one-time
+# heads-up message before that world (see WORLD_INTROS in main.py).
 # To retune, edit the formulas in build_levels. To make a single level easier or
 # harder, edit its dict in the LEVELS list after it is built.
 
@@ -59,17 +62,22 @@ def build_levels():
         monster_hp = _clamp(1 + (g - 1) // 20, 1, 3)
         fire_count = _clamp(1 + (g - 1) // 16, 1, 2)
 
-        # Behavior knobs that scale with depth without adding any sprites.
+        # Behavior knobs that scale with depth without adding any sprites. Each new
+        # mechanic is gated to start at a world boundary, so it can be introduced
+        # with a heads-up message and the early worlds stay gentle:
+        #   world 2: faster enemies   world 3: pulsing fire
+        #   world 4: chasing monsters world 5: harder hits
         monster_speed = round(_clamp(2.0 - (g - 1) * 0.02, 0.8, 2.0), 2)
         fire_speed = round(_clamp(6.0 - (g - 1) * 0.07, 2.0, 6.0), 2)
-        enemy_speed_mult = round(_clamp(1.0 + (g - 1) * 0.010, 1.0, 1.4), 3)
-        chase_range = round(_clamp((g - 1) * 0.005, 0.0, 0.22), 3)
-        chase_time = round(_clamp((g - 1) * 0.02, 0.0, 1.0), 2)
-        pulse_amp = round(_clamp((g - 1) * 0.009, 0.0, 0.45), 3)
+        enemy_speed_mult = round(_clamp(1.0 + max(0, g - 10) * 0.009, 1.0, 1.4), 3)
+        chase_range = round(_clamp(max(0, g - 30) * 0.008, 0.0, 0.22), 3)
+        chase_time = round(_clamp(max(0, g - 30) * 0.035, 0.0, 1.0), 2)
+        pulse_amp = round(_clamp(max(0, g - 20) * 0.012, 0.0, 0.45), 3)
         pulse_period = round(_clamp(2.0 - (g - 1) * 0.02, 1.0, 2.0), 2)
-        # Contact damage rises only gently. The pressure is meant to come from the
+        # Contact damage stays at the base through world 4, then rises in worlds 5-6
+        # so the late game is less forgiving. Pressure mainly comes from the
         # reactable mechanics (chase, fire pulse, time), not from one touch killing.
-        contact_damage = round(_clamp(50.0 + (g - 1) * 0.4, 50.0, 70.0), 1)
+        contact_damage = round(_clamp(50.0 + max(0, g - 40) * 1.0, 50.0, 70.0), 1)
 
         # Every level is timed. The limit only ever shrinks with depth (it is a
         # function of g alone), so the time pressure never eases on a later level.
@@ -92,6 +100,8 @@ def build_levels():
             "pulse_amp": pulse_amp,
             "pulse_period": pulse_period,
             "contact_damage": contact_damage,
+            # From world 4 on, the gun reloads itself after the ammo runs out.
+            "gun_reload": world >= 4,
             "time_limit": time_limit,
             # Health shrinks from 60 down to 30 across the game, so touching a
             # monster or fire matters much more in later levels.

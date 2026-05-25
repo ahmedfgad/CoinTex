@@ -2,6 +2,9 @@
 # Everything is drawn with the canvas / standard widgets, no image files.
 # The actual gameplay screen lives in main.py.
 
+import math
+import random
+
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
 from kivy.uix.widget import Widget
@@ -15,6 +18,7 @@ from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
 from kivy.graphics import Color, RoundedRectangle, Rectangle
 from kivy.metrics import sp, dp
+from kivy.clock import Clock
 from kivy.properties import ListProperty, NumericProperty, BooleanProperty
 
 import graphics
@@ -107,6 +111,34 @@ class ConfirmDialog(ModalView):
         self.add_widget(box)
 
 
+class InfoDialog(ModalView):
+    # A simple message box with a title, body, and one OK button. Used for the
+    # heads-up messages shown before a new mechanic appears.
+    def __init__(self, title, message, on_ok=None, ok_text="Got it", **kwargs):
+        super().__init__(size_hint=(0.82, 0.5), auto_dismiss=False, **kwargs)
+        box = BoxLayout(orientation="vertical", padding=dp(22), spacing=dp(14))
+        with box.canvas.before:
+            Color(0.12, 0.14, 0.22, 0.98)
+            self._bg = RoundedRectangle(radius=[dp(16)])
+        box.bind(pos=lambda *a: setattr(self._bg, "pos", box.pos),
+                 size=lambda *a: setattr(self._bg, "size", box.size))
+        box.add_widget(Label(text=title, font_size=sp(28), bold=True,
+                             color=[1, 0.85, 0.2, 1], size_hint_y=0.3))
+        body = Label(text=message, font_size=sp(19), halign="center", valign="middle",
+                     color=[1, 1, 1, 1], size_hint_y=0.48)
+        body.bind(width=lambda *a: setattr(body, "text_size", (body.width, None)))
+        box.add_widget(body)
+        ok = StyledButton(text=ok_text, bg=[0.2, 0.7, 0.4, 1], size_hint_y=0.22)
+
+        def confirm(*a):
+            self.dismiss()
+            if on_ok:
+                on_ok()
+        ok.bind(on_release=confirm)
+        box.add_widget(ok)
+        self.add_widget(box)
+
+
 class StyledScreen(Screen):
     # A screen with a themed gradient background drawn in code.
     theme_world = 6
@@ -130,10 +162,13 @@ class MenuScreen(StyledScreen):
         box.add_widget(Label(text="CoinTex", font_size=sp(60), bold=True,
                              color=[1, 0.85, 0.2, 1], size_hint_y=0.4))
         play = StyledButton(text="Play", bg=[0.2, 0.7, 0.4, 1])
+        how = StyledButton(text="How to play", bg=[0.9, 0.6, 0.2, 1])
         settings = StyledButton(text="Settings", bg=[0.25, 0.5, 0.9, 1])
         play.bind(on_release=lambda *a: app().go("worldmap"))
+        how.bind(on_release=lambda *a: app().go("tutorial"))
         settings.bind(on_release=lambda *a: app().go("settings"))
         box.add_widget(play)
+        box.add_widget(how)
         box.add_widget(settings)
         self.stars = Label(text="", font_size=sp(18), color=[1, 1, 1, 0.85], size_hint_y=0.2)
         box.add_widget(self.stars)
@@ -143,6 +178,9 @@ class MenuScreen(StyledScreen):
         running = app()
         running.audio.play_menu_music()
         self.stars.text = "Stars collected: {}".format(running.state.total_stars())
+        # The very first time the game is opened, run the tutorial automatically.
+        if not running.state.get_setting("tutorial_seen"):
+            Clock.schedule_once(lambda dt: running.go("tutorial"), 0)
 
 
 class WorldMapScreen(StyledScreen):
@@ -376,3 +414,273 @@ class LevelButton(StyledButton):
                 cx = start + slot * (i + 0.5)
                 color = (1.0, 0.85, 0.2, 1) if i < self.stars else (1.0, 1.0, 1.0, 0.22)
                 graphics.draw_star(cx, cy, outer, color)
+
+
+# Movement speed for the practice character. Slower than the real game so a new
+# player can follow what is happening.
+TUTORIAL_SPEED = 0.5
+
+
+class TutorialScreen(StyledScreen):
+    # A short hands-on tutorial. It does not use the real game screen; it runs a
+    # small, forgiving practice level with step-by-step coaching. Reached from the
+    # menu and shown automatically the first time the game is opened.
+    theme_world = 1
+
+    def build(self):
+        self.health = 100.0
+        self.step = 0
+        self.world = FloatLayout()
+        self.root_layout.add_widget(self.world)
+
+        self.coach = Label(text="", font_size=sp(22), bold=True, color=[1, 1, 1, 1],
+                           halign="center", valign="middle",
+                           size_hint=(0.92, 0.18), pos_hint={"center_x": 0.5, "top": 0.99})
+        self.coach.bind(width=lambda *a: setattr(self.coach, "text_size", (self.coach.width, None)))
+        self.root_layout.add_widget(self.coach)
+
+        # a demo health bar, shown when health is introduced
+        self.health_holder = FloatLayout(size_hint=(0.3, 0.035), pos_hint={"x": 0.03, "top": 0.80})
+        with self.health_holder.canvas.before:
+            Color(0, 0, 0, 0.4)
+            self._hp_bg = Rectangle()
+            self._hp_color = Color(0.2, 0.8, 0.3, 1)
+            self._hp_bar = Rectangle()
+        self.health_holder.bind(pos=self._sync_hp, size=self._sync_hp)
+        self.health_holder.opacity = 0
+        self.root_layout.add_widget(self.health_holder)
+
+        self.gun_btn = GunButton(size_hint=(0.17, 0.13), pos_hint={"right": 0.98, "y": 0.03})
+        self.gun_btn.bind(on_release=lambda *a: self._fire())
+        self.gun_btn.opacity = 0
+        self.root_layout.add_widget(self.gun_btn)
+
+        skip = StyledButton(text="Skip", bg=[0.45, 0.45, 0.5, 1], font_size=sp(16),
+                            size_hint=(0.16, 0.08), pos_hint={"x": 0.02, "y": 0.03})
+        skip.bind(on_release=lambda *a: self._finish())
+        self.root_layout.add_widget(skip)
+
+        self.player = self.coin = self.monster = self.hazard = None
+        self._done_btn = None
+        self._event = None
+
+    # ----- lifecycle -----
+    def on_enter(self):
+        app().audio.play_menu_music()
+        self._reset()
+        if self._event is None:
+            self._event = Clock.schedule_interval(self._update, 1 / 60.0)
+
+    def on_leave(self):
+        if self._event is not None:
+            self._event.cancel()
+            self._event = None
+        self._clear()
+
+    def _reset(self):
+        self._clear()
+        self.health = 100.0
+        self.player = graphics.PlayerSprite(size_hint=(0.10, 0.14))
+        self.player.cx, self.player.cy = 0.5, 0.4
+        self.player.tx, self.player.ty = 0.5, 0.4
+        self._origin = (0.5, 0.4)
+        self._place(self.player)
+        self.world.add_widget(self.player)
+        self.player.start()
+        self.health_holder.opacity = 0
+        self.gun_btn.opacity = 0
+        self._sync_hp()
+        self._set_step(0)
+
+    def _clear(self):
+        for sprite in (self.player, self.coin, self.monster, self.hazard):
+            if sprite is not None:
+                sprite.stop()
+                if sprite.parent:
+                    sprite.parent.remove_widget(sprite)
+        self.player = self.coin = self.monster = self.hazard = None
+        if self._done_btn is not None:
+            if self._done_btn.parent:
+                self._done_btn.parent.remove_widget(self._done_btn)
+            self._done_btn = None
+
+    # ----- steps -----
+    def _set_step(self, n):
+        self.step = n
+        self._step_t = 0.0
+        if n == 0:
+            self.coach.text = "Welcome! Tap anywhere on the screen to move your character."
+        elif n == 1:
+            self.coach.text = "Nice! Now move onto the coin to collect it."
+            self._spawn_coin()
+        elif n == 2:
+            self.coach.text = ("Careful! Touching a monster or fire drains your health.\n"
+                               "Keep your distance and watch the health bar.")
+            self._damaged = False
+            self._spawn_monster()
+            self._spawn_hazard()
+            self.health_holder.opacity = 1
+        elif n == 3:
+            self.coach.text = "Tap the gun button (bottom right) to shoot the nearest monster."
+            self.gun_btn.ammo = 1
+            self.gun_btn.ready = True
+            self.gun_btn.opacity = 1
+        elif n == 4:
+            self.coach.text = ("That is it! In a real level, collect every coin before the\n"
+                               "timer runs out. You are ready to play!")
+            self.gun_btn.opacity = 0
+            self._show_done()
+
+    def _update(self, dt):
+        if self.player is None:
+            return
+        self._move(self.player, self.player.tx, self.player.ty, TUTORIAL_SPEED * dt)
+
+        if self.step == 0:
+            ox, oy = self._origin
+            if ((self.player.cx - ox) ** 2 + (self.player.cy - oy) ** 2) ** 0.5 > 0.12:
+                self._set_step(1)
+        elif self.step == 1:
+            if self.coin is not None and self._touch(self.player, self.coin, 0.07):
+                app().audio.play_sfx("coin")
+                self.coin.stop()
+                self.world.remove_widget(self.coin)
+                self.coin = None
+                self._set_step(2)
+        elif self.step == 2:
+            self._wander(self.monster, dt)
+            self._sweep(self.hazard, dt)
+            hit = ((self.monster is not None and self._touch(self.player, self.monster, 0.09))
+                   or (self.hazard is not None and self._touch(self.player, self.hazard, 0.08)))
+            if hit:
+                self.health = max(25.0, self.health - 30.0 * dt)
+                self.player.hit_flash()
+                self._damaged = True
+            self._update_hp_bar()
+            self._step_t += dt
+            if (self._damaged and self._step_t > 1.5) or self._step_t > 10.0:
+                self._set_step(3)
+        elif self.step == 3:
+            self._wander(self.monster, dt)
+            self._sweep(self.hazard, dt)
+
+    def _fire(self):
+        if self.step != 3 or self.monster is None:
+            return
+        running = app()
+        running.audio.play_sfx("shoot")
+        self.world.add_widget(graphics.ParticleBurst(self._px(self.monster), color=(1, 0.4, 0.4)))
+        self.monster.stop()
+        if self.monster.parent:
+            self.monster.parent.remove_widget(self.monster)
+        self.monster = None
+        running.audio.play_sfx("monster_death")
+        self._set_step(4)
+
+    def _show_done(self):
+        if self._done_btn is not None:
+            return
+        self._done_btn = StyledButton(text="Play!", bg=[0.2, 0.7, 0.4, 1],
+                                      size_hint=(0.3, 0.1), pos_hint={"center_x": 0.5, "y": 0.16})
+        self._done_btn.bind(on_release=lambda *a: self._finish())
+        self.root_layout.add_widget(self._done_btn)
+
+    def _finish(self):
+        running = app()
+        running.state.set_setting("tutorial_seen", True)
+        running.go("menu")
+
+    # ----- input -----
+    def on_touch_down(self, touch):
+        if super().on_touch_down(touch):
+            return True
+        if self.player is not None:
+            self.player.tx = min(max(touch.sx, 0.06), 0.94)
+            self.player.ty = min(max(touch.sy, 0.10), 0.92)
+            return True
+        return False
+
+    # ----- helpers (a small, self-contained copy of the game movement) -----
+    def _place(self, sprite):
+        shw, shh = sprite.size_hint
+        sprite.pos_hint = {"x": sprite.cx - shw / 2, "y": sprite.cy - shh / 2}
+
+    def _move(self, sprite, tx, ty, step):
+        dx, dy = tx - sprite.cx, ty - sprite.cy
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist <= step or dist == 0:
+            sprite.cx, sprite.cy = tx, ty
+            sprite.moving = False
+            self._place(sprite)
+            return True
+        ux, uy = dx / dist, dy / dist
+        sprite.face_x, sprite.face_y = ux, uy
+        sprite.moving = True
+        sprite.cx += ux * step
+        sprite.cy += uy * step
+        self._place(sprite)
+        return False
+
+    def _wander(self, monster, dt):
+        if monster is None:
+            return
+        if self._move(monster, monster.tx, monster.ty, 0.18 * dt):
+            monster.tx = random.uniform(0.2, 0.8)
+            monster.ty = random.uniform(0.3, 0.7)
+
+    def _sweep(self, hazard, dt):
+        if hazard is None:
+            return
+        hazard.t = (hazard.t + dt / hazard.period) % 1.0
+        phase = 0.5 - 0.5 * math.cos(hazard.t * 2 * math.pi)
+        hazard.cx = hazard.ax + (hazard.bx - hazard.ax) * phase
+        hazard.cy = hazard.ay + (hazard.by - hazard.ay) * phase
+        self._place(hazard)
+
+    def _touch(self, a, b, thresh):
+        return ((a.cx - b.cx) ** 2 + (a.cy - b.cy) ** 2) ** 0.5 < thresh
+
+    def _px(self, sprite):
+        return (self.world.x + sprite.cx * self.world.width,
+                self.world.y + sprite.cy * self.world.height)
+
+    def _spawn_coin(self):
+        self.coin = graphics.Coin(size_hint=(0.045, 0.06))
+        self.coin.cx, self.coin.cy = 0.75, 0.55
+        self._place(self.coin)
+        self.world.add_widget(self.coin)
+        self.coin.start()
+
+    def _spawn_monster(self):
+        self.monster = graphics.MonsterSprite(size_hint=(0.11, 0.14))
+        self.monster.mtype = 1
+        self.monster.max_hp = 1
+        self.monster.hp = 1
+        self.monster.cx, self.monster.cy = 0.25, 0.6
+        self.monster.tx, self.monster.ty = 0.5, 0.5
+        self._place(self.monster)
+        self.world.add_widget(self.monster)
+        self.monster.start()
+
+    def _spawn_hazard(self):
+        self.hazard = graphics.Hazard(size_hint=(0.05, 0.08))
+        self.hazard.ax, self.hazard.ay = 0.4, 0.2
+        self.hazard.bx, self.hazard.by = 0.4, 0.7
+        self.hazard.t = 0.0
+        self.hazard.period = 4.0
+        self.hazard.size_factor = 1.0
+        self.hazard.cx, self.hazard.cy = self.hazard.ax, self.hazard.ay
+        self._place(self.hazard)
+        self.world.add_widget(self.hazard)
+        self.hazard.start()
+
+    def _sync_hp(self, *args):
+        self._hp_bg.pos = self.health_holder.pos
+        self._hp_bg.size = self.health_holder.size
+        self._update_hp_bar()
+
+    def _update_hp_bar(self):
+        frac = max(0.0, self.health / 100.0)
+        self._hp_bar.pos = self.health_holder.pos
+        self._hp_bar.size = (self.health_holder.width * frac, self.health_holder.height)
+        self._hp_color.rgba = [1 - frac, 0.3 + 0.5 * frac, 0.2, 1]

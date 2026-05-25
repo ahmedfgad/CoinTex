@@ -26,6 +26,7 @@ SFX_FILES = {
     "damage": "sfx_damage.wav",
     "click": "sfx_click.wav",
     "victory": "sfx_victory.wav",
+    "reload": "sfx_reload.wav",
 }
 
 

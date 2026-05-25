@@ -49,6 +49,22 @@ HAZARD_SIZE = (0.05, 0.08)
 PROJECTILE_SIZE = (0.035, 0.05)
 FREEZER_SIZE = (0.05, 0.07)
 RESPAWN_MARKER_SIZE = (0.07, 0.10)
+RELOAD_SECONDS = 5.0        # time for the gun to refill after it runs out (world 4+)
+
+# A short heads-up shown once before the first level of a world that brings a new
+# mechanic, so the player is ready for it. Keyed by world number.
+WORLD_INTROS = {
+    2: ("Faster Enemies",
+        "From here on, monsters and fire move quicker.\nKeep moving and stay sharp!"),
+    3: ("Pulsing Fire",
+        "Fires now grow and shrink as they move.\nTheir danger zone gets bigger and smaller,\nso time your crossings."),
+    4: ("Chasers and a Reloading Gun",
+        "Monsters now chase you when you get close\n(watch for the red glowing one).\nGood news: your gun now reloads on its own\nafter you run out, so shoot a chaser to clear it."),
+    5: ("Less Forgiving",
+        "Hits hurt more from now on.\nAvoid contact and keep your health up."),
+    6: ("Final World",
+        "Everything at once: fast chasers, pulsing fire,\nand hard hits. Good luck!"),
+}
 
 
 def place(sprite):
@@ -148,6 +164,13 @@ class GameScreen(Screen):
         self.freeze_timer.opacity = 0
         self.hud.add_widget(self.freeze_timer)
 
+        # gun reload countdown (orange), shown just above the gun while it refills
+        self.reload_dial = graphics.FreezeTimer(wedge=(1.0, 0.6, 0.2), dark=(0.35, 0.15, 0.05),
+                                                size_hint=(0.08, 0.11),
+                                                pos_hint={"right": 0.93, "y": 0.18})
+        self.reload_dial.opacity = 0
+        self.hud.add_widget(self.reload_dial)
+
         # Auto play toggle (bottom-left). Tapping it lets the built-in genetic
         # algorithm take over, and tapping again returns to manual control.
         self.auto_btn = ui.StyledButton(text="Auto: Off", bg=[0.45, 0.45, 0.5, 1],
@@ -204,6 +227,8 @@ class GameScreen(Screen):
         self.pulse_amp = self.level["pulse_amp"]
         self.pulse_period = self.level["pulse_period"]
         self.contact_damage = self.level["contact_damage"]
+        self.reload_gun = self.level["gun_reload"]
+        self.reload_time = 0.0   # >0 while the gun is refilling
         self.active = True
         self.paused = False
 
@@ -366,6 +391,13 @@ class GameScreen(Screen):
             return
         if self.cooldown > 0:
             self.cooldown -= dt
+        if self.reload_time > 0:
+            self.reload_time -= dt
+            if self.reload_time <= 0:
+                self.reload_time = 0.0
+                self.ammo = self.level["ammo"]
+                self.fire_btn.ammo = self.ammo
+                kivy.app.App.get_running_app().audio.play_sfx("reload")
 
         frozen = self.freeze_time > 0
         if frozen:
@@ -465,6 +497,12 @@ class GameScreen(Screen):
             self.freeze_timer.fraction = self.freeze_time / FREEZE_DURATION
         else:
             self.freeze_timer.opacity = 0
+        if self.reload_time > 0:
+            self.reload_dial.opacity = 1
+            self.reload_dial.seconds = self.reload_time
+            self.reload_dial.fraction = self.reload_time / RELOAD_SECONDS
+        else:
+            self.reload_dial.opacity = 0
 
     def _move_toward(self, sprite, tx, ty, step):
         dx = tx - sprite.cx
@@ -513,6 +551,9 @@ class GameScreen(Screen):
         self.cooldown = FIRE_COOLDOWN
         self.ammo -= 1
         self.fire_btn.ammo = self.ammo
+        # From world 4 on, start the reload clock once the clip is empty.
+        if self.ammo <= 0 and self.reload_gun and self.reload_time <= 0:
+            self.reload_time = RELOAD_SECONDS
         shot = graphics.Projectile(size_hint=PROJECTILE_SIZE)
         shot.cx, shot.cy = self.player.cx, self.player.cy
         shot.target = target
@@ -568,13 +609,16 @@ class GameScreen(Screen):
                 monster.parent.remove_widget(monster)
             if monster in self.monsters:
                 self.monsters.remove(monster)
-            # drop a countdown marker where it died; it returns there at zero
+            # It returns away from the player (not at the death spot), so shooting
+            # a chaser actually buys space. A countdown marker shows where it will
+            # come back.
+            rx, ry = self._spawn_point_away()
             marker = graphics.RespawnMarker(size_hint=RESPAWN_MARKER_SIZE)
-            marker.cx, marker.cy = monster.cx, monster.cy
+            marker.cx, marker.cy = rx, ry
             place(marker)
             self.world.add_widget(marker)
-            self.pending_respawns.append({"t": RESPAWN_DELAY, "x": monster.cx,
-                                          "y": monster.cy, "marker": marker})
+            self.pending_respawns.append({"t": RESPAWN_DELAY, "x": rx,
+                                          "y": ry, "marker": marker})
             app.audio.play_sfx("monster_death")
         else:
             app.audio.play_sfx("hit")
@@ -756,6 +800,7 @@ class CointexApp(kivy.app.App):
         self.sm.add_widget(ui.LevelSelectScreen(name="levelselect"))
         self.sm.add_widget(ui.SettingsScreen(name="settings"))
         self.sm.add_widget(ui.AboutScreen(name="about"))
+        self.sm.add_widget(ui.TutorialScreen(name="tutorial"))
         self.game = GameScreen(name="game")
         self.sm.add_widget(self.game)
         return self.sm
@@ -768,6 +813,21 @@ class CointexApp(kivy.app.App):
         self.go("levelselect")
 
     def start_level(self, index):
+        # Before the first level of a world that brings a new mechanic, show a
+        # one-time heads-up message so the player knows what to expect.
+        level = levels.get_level(index)
+        world = level["world"]
+        first_of_world = (world - 1) * levels.LEVELS_PER_WORLD + 1
+        intro = WORLD_INTROS.get(world)
+        flag = "intro_seen_w{}".format(world)
+        if index == first_of_world and intro and not self.state.get_setting(flag):
+            self.state.set_setting(flag, True)
+            title, body = intro
+            ui.InfoDialog(title, body, on_ok=lambda: self._enter_level(index)).open()
+        else:
+            self._enter_level(index)
+
+    def _enter_level(self, index):
         self.current_level_index = index
         self.current_world = levels.get_level(index)["world"]
         self.game.load_level(index)

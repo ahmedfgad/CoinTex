@@ -8,11 +8,18 @@ import json
 import os
 import pickle
 
-# Settings and their starting values.
+# Settings and their starting values. The "seen" flags remember one-time things:
+# the tutorial auto-shows once, and each world's heads-up message shows once.
 DEFAULT_SETTINGS = {
     "music_on": True,
     "sfx_on": True,
     "volume": 1.0,   # 0.0 to 1.0
+    "tutorial_seen": False,
+    "intro_seen_w2": False,
+    "intro_seen_w3": False,
+    "intro_seen_w4": False,
+    "intro_seen_w5": False,
+    "intro_seen_w6": False,
 }
 
 SAVE_NAME = "cointex_save.json"

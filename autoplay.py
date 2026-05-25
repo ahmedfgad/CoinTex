@@ -123,6 +123,8 @@ def sense(game):
         "time_left": getattr(game, "time_left", None),
         "time_limit": game.level["time_limit"] if getattr(game, "level", None) else None,
         "coins_left": len(coins),
+        "ammo": getattr(game, "ammo", 0),
+        "reloading": getattr(game, "reload_time", 0.0) > 0,
     }
 
 
@@ -144,6 +146,12 @@ def fitness(snapshot, target_x, target_y):
     coin_weight = COIN_WEIGHT * (1.0 + 2.5 * urgency)
     hit_penalty = SAFE_HIT_PENALTY * (1.0 - 0.4 * urgency)
 
+    # When a monster is chasing and the gun is empty, the agent cannot shoot back,
+    # so it must commit to escaping: give chasers extra berth and flee harder.
+    dangers = snapshot.get("dangers")
+    no_ammo = snapshot.get("ammo", 1) <= 0
+    chaser_near = no_ammo and any(d.get("chasing") for d in (dangers or []))
+
     # Attraction toward the most reachable coin, the one closest to this target.
     # It is weak so safety comes first (stronger when the clock is short).
     best_pull = 0.0
@@ -159,14 +167,16 @@ def fitness(snapshot, target_x, target_y):
     # required clearance grows with the danger's own size (so pulsing fires and
     # bigger monsters are respected), and chasers get extra berth plus a look
     # ahead along their heading.
-    dangers = snapshot.get("dangers")
     if dangers is not None:
         for d in dangers:
             lead = LOOKAHEAD if d["chasing"] else 0.0
             ax = d["x"] + d["fx"] * lead
             ay = d["y"] + d["fy"] * lead
             gap = point_segment_distance(ax, ay, player_x, player_y, target_x, target_y)
-            clear = SAFE_RADIUS + d["r"] + (CHASE_MARGIN if d["chasing"] else 0.0)
+            extra = 0.0
+            if d["chasing"]:
+                extra = CHASE_MARGIN + (0.10 if no_ammo else 0.0)
+            clear = SAFE_RADIUS + d["r"] + extra
             if gap >= clear:
                 score += SAFE_CLEAR_BONUS
             else:
@@ -186,7 +196,8 @@ def fitness(snapshot, target_x, target_y):
     if flee_from is not None:
         flee_x, flee_y = flee_from
         away = ((target_x - flee_x) ** 2 + (target_y - flee_y) ** 2) ** 0.5
-        score += away * FLEE_WEIGHT
+        flee_weight = FLEE_WEIGHT * (2.5 if chaser_near else 1.0)
+        score += away * flee_weight
 
     # Mild preference for shorter moves so it grabs near coins first.
     score -= (((target_x - player_x) ** 2 + (target_y - player_y) ** 2) ** 0.5) * NEAR_PLAYER_WEIGHT

@@ -216,6 +216,8 @@ class MonsterSprite(CanvasSprite):
         wob = math.sin(self.phase * 6.0) * r * 0.06
         cy = y + h / 2 + wob
         base = MONSTER_COLORS.get(int(self.mtype), MONSTER_COLORS[1])
+        if self.chasing and not self.frozen:
+            base = (1.0, 0.25, 0.2)   # whole body turns angry red while chasing
         dark = (base[0] * 0.6, base[1] * 0.6, base[2] * 0.6)
         fx, fy = self._facing()
         px, py = -fy, fx
@@ -280,9 +282,15 @@ class MonsterSprite(CanvasSprite):
             Color(0.6, 0.85, 1.0, 0.45)
             Ellipse(pos=(cx - r * 1.05, cy - r * 1.05), size=(r * 2.1, r * 2.1))
         elif self.chasing:
-            # red alert ring while it is locked onto and chasing the player
-            Color(1.0, 0.2, 0.15, 0.9)
-            Line(ellipse=(cx - r * 1.18, cy - r * 1.18, r * 2.36, r * 2.36), width=2)
+            # Strong "it is hunting you" look: a bold pulsing red ring plus an
+            # exclamation mark above the head (the body is already tinted red).
+            ring = r * (1.15 + 0.12 * (0.5 + 0.5 * math.sin(self.phase * 8.0)))
+            Color(1.0, 0.15, 0.1, 0.95)
+            Line(ellipse=(cx - ring, cy - ring, ring * 2, ring * 2), width=3)
+            ex, ey = cx, cy + r * 1.45
+            Color(1.0, 0.95, 0.2, 1)
+            Rectangle(pos=(ex - r * 0.08, ey), size=(r * 0.16, r * 0.5))      # bar
+            Ellipse(pos=(ex - r * 0.1, ey - r * 0.3), size=(r * 0.2, r * 0.2))  # dot
 
         if self.flash > 0:
             Color(1, 1, 1, self.flash * 0.85)
@@ -433,14 +441,17 @@ class Freezer(CanvasSprite):
 
 
 class FreezeTimer(Widget):
-    # A round countdown shown while the freeze is active. The blue wedge shrinks
-    # clockwise and the number in the middle shows the seconds left.
+    # A round countdown. The colored wedge shrinks clockwise and the number in the
+    # middle shows the seconds left. Reused for the freeze pickup (blue) and the
+    # gun reload (orange) by passing different colors.
     fraction = NumericProperty(1.0)
     seconds = NumericProperty(0.0)
 
-    def __init__(self, **kwargs):
+    def __init__(self, wedge=(0.45, 0.80, 1.0), dark=(0.05, 0.16, 0.32), **kwargs):
         from kivy.uix.label import Label
         super().__init__(**kwargs)
+        self._wedge = wedge
+        self._dark = dark
         self.label = Label(text="", bold=True, color=(1, 1, 1, 1))
         self.add_widget(self.label)
         self.bind(pos=self._redraw, size=self._redraw,
@@ -452,14 +463,16 @@ class FreezeTimer(Widget):
         w, h = self.size
         cx, cy = x + w / 2, y + h / 2
         r = min(w, h) * 0.5
+        dr, dg, db = self._dark
+        wr, wg, wb = self._wedge
         self.canvas.before.clear()
         with self.canvas.before:
-            Color(0.05, 0.16, 0.32, 0.9)
+            Color(dr, dg, db, 0.9)
             Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
-            Color(0.45, 0.80, 1.0, 1)
+            Color(wr, wg, wb, 1)
             Ellipse(pos=(cx - r * 0.92, cy - r * 0.92), size=(r * 1.84, r * 1.84),
                     angle_start=0, angle_end=360 * max(0.0, min(1.0, self.fraction)))
-            Color(0.05, 0.16, 0.32, 1)
+            Color(dr, dg, db, 1)
             Ellipse(pos=(cx - r * 0.6, cy - r * 0.6), size=(r * 1.2, r * 1.2))
         self.label.center = (cx, cy)
         self.label.font_size = r * 0.8

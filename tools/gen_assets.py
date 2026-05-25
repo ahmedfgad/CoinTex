@@ -98,6 +98,15 @@ def make_sfx():
     v = np.concatenate(parts)
     _write_wav("sfx_victory.wav", v)
 
+    # reload: a mechanical two-part "cha-chunk" so the player hears the gun refill
+    c1 = _tone(330, 0.05, "square") * 0.4
+    c1 = c1 * _envelope(c1.size, 0.001, 0.03)
+    gap = np.zeros(int(RATE * 0.06))
+    c2 = _tone(520, 0.07, "square") * 0.45
+    c2 = c2 * _envelope(c2.size, 0.001, 0.04)
+    rl = np.concatenate([c1, gap, c2])
+    _write_wav("sfx_reload.wav", rl)
+
 
 def _coin(draw, cx, cy, r):
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(204, 150, 26))

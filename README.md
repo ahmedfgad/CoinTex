@@ -66,6 +66,8 @@ The game is already distributed for end-user to download and run easily for Andr
 
 For Android, it is available at [Google Play](https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast).
 
+For iPhone, see [IOS_INSTALL.md](IOS_INSTALL.md) for the steps to install the game on your device.
+
 # Game Documentation
 
 The CoinTex game is 100% documented in chapters 5 and 6 of the book titled [Building Android Apps in Python Using Kivy with Android Studio](https://www.amazon.com/Building-Android-Python-Using-Studio/dp/1484250303). It starts from a hello world app until building CoinTex.

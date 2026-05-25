@@ -72,7 +72,7 @@ class StyledButton(ButtonBehavior, Label):
 
 
 class ConfirmDialog(ModalView):
-    def __init__(self, message, on_yes, yes_text="Yes", no_text="No", **kwargs):
+    def __init__(self, message, on_yes, yes_text="Yes", no_text="No", on_no=None, **kwargs):
         super().__init__(size_hint=(0.75, 0.45), auto_dismiss=False, **kwargs)
         box = BoxLayout(orientation="vertical", padding=dp(20), spacing=dp(16))
         with box.canvas.before:
@@ -85,7 +85,12 @@ class ConfirmDialog(ModalView):
         row = BoxLayout(orientation="horizontal", spacing=dp(16), size_hint_y=0.4)
         no_btn = StyledButton(text=no_text, bg=[0.45, 0.45, 0.5, 1])
         yes_btn = StyledButton(text=yes_text, bg=[0.85, 0.3, 0.3, 1])
-        no_btn.bind(on_release=lambda *a: self.dismiss())
+
+        def cancel(*a):
+            self.dismiss()
+            if on_no:
+                on_no()
+        no_btn.bind(on_release=cancel)
 
         def confirm(*a):
             self.dismiss()

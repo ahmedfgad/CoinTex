@@ -462,6 +462,7 @@ class GameScreen(Screen):
             return
         self.active = False
         app = kivy.app.App.get_running_app()
+        app.audio.stop_music()  # all coins collected, so the level music stops
         app.audio.play_sfx("victory")
         score, stars = self._score_and_stars()
         app.state.record_result(self.index, score, stars)
@@ -479,6 +480,7 @@ class GameScreen(Screen):
             return
         self.active = False
         app = kivy.app.App.get_running_app()
+        app.audio.stop_music()  # level over
         if self.player is not None:
             self.player.dead = True
         app.audio.play_sfx("death")
@@ -495,19 +497,20 @@ class GameScreen(Screen):
             return
         self.paused = True
         app = kivy.app.App.get_running_app()
+        app.audio.stop_music()  # silence while paused
 
         def quit_to_menu():
             self.active = False
             app.go("levelselect")
-        dialog = ui.ConfirmDialog("Quit to the level menu?\nThis level's progress is lost.",
-                                  quit_to_menu, yes_text="Quit", no_text="Resume")
-        dialog.bind(on_dismiss=lambda *a: self._resume())
-        dialog.open()
+        ui.ConfirmDialog("Quit to the level menu?\nThis level's progress is lost.",
+                         quit_to_menu, yes_text="Quit", no_text="Resume",
+                         on_no=self._resume).open()
 
     def _resume(self):
-        # Only un-pause if we are still on this level (not quitting).
+        # Resume play and bring the level music back.
         if self.active:
             self.paused = False
+            kivy.app.App.get_running_app().audio.play_level_music(self.level["world"])
 
 
 class CointexApp(kivy.app.App):

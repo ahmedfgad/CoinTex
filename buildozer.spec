@@ -12,15 +12,16 @@ package.domain = coin.tex
 # Folder that holds main.py.
 source.dir = .
 
-# File types to include in the package.
-source.include_exts = py,png,jpg,kv,atlas,wav
+# File types to include in the package. All graphics are drawn in code now, so
+# the only images are the launcher icon and splash (png). Audio is wav.
+source.include_exts = py,png,wav
 
-# Folders to leave out of the package. PlayerGA is the genetic algorithm version
-# and needs pygad and numpy, so it must not be shipped. The rest are build files.
-source.exclude_dirs = bin, venv, .venv, .buildozer, .git, __pycache__, PlayerGA
+# Folders to leave out of the package. PlayerGA is the old genetic algorithm
+# version (needs pygad and numpy). audio_alternatives and tools are dev only.
+source.exclude_dirs = bin, venv, .venv, .buildozer, .git, __pycache__, PlayerGA, audio_alternatives, tools, music/originals
 
 # Version shown to users.
-version = 1.2
+version = 1.3
 
 # Packages the app needs. The release game only needs Kivy.
 requirements = python3,kivy
@@ -59,7 +60,7 @@ android.release_artifact = aab
 # Version code. It must be higher than the version code already on Google Play,
 # or the upload is rejected. Check the current value in Play Console under
 # Release, App bundle explorer.
-android.numeric_version = 10200
+android.numeric_version = 10300
 
 # Background color of the splash screen.
 android.presplash_color = #000000

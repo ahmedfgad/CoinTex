@@ -1,548 +1,543 @@
-import kivy.app
-import kivy.uix.screenmanager
-import kivy.uix.image
-import random
-import kivy.core.audio
+# CoinTex main file.
+#
+# The game is a top-down coin collector. You move your character around a level
+# to pick up all the coins while dodging monsters and fire, and you can shoot
+# the nearest monster. Levels, graphics, audio, saving and the menu screens live
+# in separate modules (levels.py, graphics.py, audio.py, state.py, ui.py). This
+# file holds the app, the gameplay screen and the rules.
+
 import os
-import functools
-import kivy.uix.behaviors
-import kivy.animation
-import kivy.clock
-import pickle
+import math
+import random
+
+import kivy.app
+from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivy.uix.modalview import ModalView
+from kivy.graphics import Color, RoundedRectangle, Rectangle
+from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.metrics import sp, dp
+
+import levels
+import graphics
+import ui
+from state import GameState
+from audio import AudioManager
+
+# Tuning values. Positions are kept as a center point in 0..1 over the play area.
+PLAYER_SPEED = 0.6          # how fast the player moves, screens per second
+PROJECTILE_SPEED = 1.2
+FIRE_COOLDOWN = 0.45        # seconds between shots
+CONTACT_DAMAGE = 32.0       # health lost per second while touching a monster/fire
+COIN_POINTS = 100
+KILL_POINTS = 150
+TIME_BONUS = 4              # score per second left when a level has a time limit
+
+PLAYER_SIZE = (0.10, 0.14)
+MONSTER_SIZE = (0.11, 0.14)
+COIN_SIZE = (0.045, 0.06)
+HAZARD_SIZE = (0.05, 0.08)
+PROJECTILE_SIZE = (0.035, 0.05)
+
+
+def place(sprite):
+    # Set a sprite's pos_hint from its center (cx, cy) and its size_hint.
+    shw, shh = sprite.size_hint
+    sprite.pos_hint = {"x": sprite.cx - shw / 2, "y": sprite.cy - shh / 2}
+
+
+class ResultOverlay(ModalView):
+    # Shown when a level is won or lost. Offers next/retry/menu actions.
+    def __init__(self, title, lines, buttons, **kwargs):
+        super().__init__(size_hint=(0.8, 0.6), auto_dismiss=False, **kwargs)
+        box = BoxLayout(orientation="vertical", padding=dp(22), spacing=dp(14))
+        with box.canvas.before:
+            Color(0.12, 0.14, 0.22, 0.98)
+            self._bg = RoundedRectangle(radius=[dp(16)])
+        box.bind(pos=lambda *a: setattr(self._bg, "pos", box.pos),
+                 size=lambda *a: setattr(self._bg, "size", box.size))
+        box.add_widget(Label(text=title, font_size=sp(34), bold=True,
+                             color=[1, 0.85, 0.2, 1], size_hint_y=0.3))
+        box.add_widget(Label(text="\n".join(lines), font_size=sp(20),
+                             color=[1, 1, 1, 1], halign="center", size_hint_y=0.4))
+        row = BoxLayout(orientation="horizontal", spacing=dp(12), size_hint_y=0.3)
+        for text, color, callback in buttons:
+            btn = ui.StyledButton(text=text, bg=color)
+            btn.bind(on_release=lambda b, cb=callback: (self.dismiss(), cb()))
+            row.add_widget(btn)
+        box.add_widget(row)
+        self.add_widget(box)
+
+
+class GameScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # The world holds the background and all sprites. The hud sits on top.
+        self.world = FloatLayout()
+        self.bg = graphics.Background(levels.get_world(1), size_hint=(1, 1))
+        self.world.add_widget(self.bg)
+        self.add_widget(self.world)
+        self.hud = FloatLayout()
+        self.add_widget(self.hud)
+        self._build_hud()
+
+        self.level = None
+        self.active = False
+        self.paused = False
+        self.player = None
+        self.monsters = []
+        self.coins = []
+        self.hazards = []
+        self.projectiles = []
+        self._update_event = None
+
+    def _build_hud(self):
+        self.coin_label = Label(text="", font_size=sp(20), bold=True, color=[1, 1, 1, 1],
+                                size_hint=(0.25, 0.06), pos_hint={"x": 0.02, "top": 0.99})
+        self.level_label = Label(text="", font_size=sp(20), bold=True, color=[1, 1, 1, 1],
+                                 size_hint=(0.2, 0.06), pos_hint={"center_x": 0.5, "top": 0.99})
+        self.time_label = Label(text="", font_size=sp(20), bold=True, color=[1, 1, 0.5, 1],
+                                size_hint=(0.2, 0.06), pos_hint={"right": 0.78, "top": 0.99})
+        self.hud.add_widget(self.coin_label)
+        self.hud.add_widget(self.level_label)
+        self.hud.add_widget(self.time_label)
+
+        # health bar (drawn in code), top-left under the coin label
+        self.health_holder = FloatLayout(size_hint=(0.25, 0.03), pos_hint={"x": 0.02, "top": 0.92})
+        with self.health_holder.canvas.before:
+            Color(0, 0, 0, 0.4)
+            self._hp_bg = Rectangle()
+            self._hp_color = Color(0.2, 0.8, 0.3, 1)
+            self._hp_bar = Rectangle()
+        self.health_holder.bind(pos=self._sync_health, size=self._sync_health)
+        self.hud.add_widget(self.health_holder)
+
+        self.pause_btn = ui.StyledButton(text="II", bg=[0.3, 0.3, 0.4, 0.9],
+                                         size_hint=(0.08, 0.08), pos_hint={"right": 0.99, "top": 0.99})
+        self.pause_btn.bind(on_release=lambda *a: self._open_pause())
+        self.hud.add_widget(self.pause_btn)
+
+        self.fire_btn = ui.StyledButton(text="Fire", bg=[0.9, 0.4, 0.2, 0.9],
+                                        size_hint=(0.16, 0.12), pos_hint={"right": 0.98, "y": 0.03})
+        self.fire_btn.bind(on_release=lambda *a: self.fire())
+        self.hud.add_widget(self.fire_btn)
+
+    def _sync_health(self, *args):
+        self._hp_bg.pos = self.health_holder.pos
+        self._hp_bg.size = self.health_holder.size
+        self._update_health_bar()
+
+    def _update_health_bar(self):
+        frac = 0 if self.level is None else max(0.0, self.health / self.max_health)
+        self._hp_bar.pos = self.health_holder.pos
+        self._hp_bar.size = (self.health_holder.width * frac, self.health_holder.height)
+        # green when healthy, red when low
+        self._hp_color.rgba = [1 - frac, 0.3 + 0.5 * frac, 0.2, 1]
+
+    # ----- building a level -----
+    def load_level(self, index):
+        self._clear_sprites()
+        self.level = levels.get_level(index)
+        self.index = index
+        theme = levels.get_world(self.level["world"])
+        self.bg.set_theme(theme)
+        # In-level music changes per world.
+        kivy.app.App.get_running_app().audio.play_level_music(self.level["world"])
+
+        self.max_health = self.level["player_health"]
+        self.health = self.max_health
+        self.score = 0
+        self.kills = 0
+        self.collected = 0
+        self.cooldown = 0.0
+        self.time_left = self.level["time_limit"]
+        self.active = True
+        self.paused = False
+
+        # player starts bottom-left
+        self.player = graphics.PlayerSprite(size_hint=PLAYER_SIZE)
+        self.player.cx, self.player.cy = 0.1, 0.12
+        self.player.tx, self.player.ty = self.player.cx, self.player.cy
+        place(self.player)
+        self.world.add_widget(self.player)
+        self.player.start()
+
+        # monsters
+        speed_norm = 0.45 / self.level["monster_speed"]
+        for i in range(self.level["monsters"]):
+            # Monster looks match their toughness: hp 1, 2 or 3 -> type 1, 2 or 3.
+            monster = graphics.MonsterSprite(size_hint=MONSTER_SIZE)
+            monster.mtype = max(1, min(3, self.level["monster_hp"]))
+            monster.max_hp = self.level["monster_hp"]
+            monster.hp = monster.max_hp
+            monster.cx, monster.cy = random.uniform(0.4, 0.9), random.uniform(0.4, 0.9)
+            monster.tx, monster.ty = self._random_point()
+            monster.speed = speed_norm
+            place(monster)
+            self.world.add_widget(monster)
+            monster.start()
+            self.monsters.append(monster)
+
+        # coins, spread across the width in sections like the original game
+        section = 1.0 / self.level["coins"]
+        for k in range(self.level["coins"]):
+            coin = graphics.Coin(size_hint=COIN_SIZE)
+            coin.cx = random.uniform(section * k + 0.03, section * (k + 1) - 0.03)
+            coin.cx = min(max(coin.cx, 0.05), 0.95)
+            coin.cy = random.uniform(0.2, 0.9)
+            place(coin)
+            self.world.add_widget(coin)
+            coin.start()
+            self.coins.append(coin)
+
+        # hazards sweep between two points
+        for i in range(self.level["fires"]):
+            hazard = graphics.Hazard(size_hint=HAZARD_SIZE)
+            hazard.ax, hazard.ay = random.uniform(0.1, 0.9), random.uniform(0.15, 0.85)
+            hazard.bx, hazard.by = random.uniform(0.1, 0.9), random.uniform(0.15, 0.85)
+            hazard.t = random.uniform(0, 1)
+            hazard.period = self.level["fire_speed"]
+            hazard.cx, hazard.cy = hazard.ax, hazard.ay
+            place(hazard)
+            self.world.add_widget(hazard)
+            hazard.start()
+            self.hazards.append(hazard)
+
+        self._refresh_hud()
+
+    def _random_point(self):
+        return random.uniform(0.1, 0.95), random.uniform(0.15, 0.95)
+
+    def _clear_sprites(self):
+        for sprite in [self.player] + self.monsters + self.coins + self.hazards + self.projectiles:
+            if sprite is not None:
+                sprite.stop()
+                if sprite.parent:
+                    sprite.parent.remove_widget(sprite)
+        self.player = None
+        self.monsters = []
+        self.coins = []
+        self.hazards = []
+        self.projectiles = []
+
+    # ----- screen lifecycle -----
+    def on_enter(self):
+        app = kivy.app.App.get_running_app()
+        if self.level is not None:
+            app.audio.play_level_music(self.level["world"])
+        if self._update_event is None:
+            self._update_event = Clock.schedule_interval(self.update, 1 / 60.0)
+        Window.bind(on_key_down=self._on_key)
+
+    def on_leave(self):
+        if self._update_event is not None:
+            self._update_event.cancel()
+            self._update_event = None
+        Window.unbind(on_key_down=self._on_key)
+        self._clear_sprites()
+
+    def _on_key(self, window, key, scancode, codepoint, modifiers):
+        if key == 32:  # spacebar fires
+            self.fire()
+            return True
+        return False
+
+    # ----- input -----
+    def on_touch_down(self, touch):
+        # Let the HUD buttons handle their taps first.
+        if super().on_touch_down(touch):
+            return True
+        if self.active and not self.paused and self.player is not None:
+            self.player.tx = min(max(touch.sx, 0.05), 0.95)
+            self.player.ty = min(max(touch.sy, 0.05), 0.95)
+            return True
+        return False
+
+    # ----- main loop -----
+    def update(self, dt):
+        if not self.active or self.paused or self.player is None:
+            return
+        if self.cooldown > 0:
+            self.cooldown -= dt
+
+        self._move_toward(self.player, self.player.tx, self.player.ty, PLAYER_SPEED * dt)
+
+        for monster in self.monsters:
+            reached = self._move_toward(monster, monster.tx, monster.ty, monster.speed * dt)
+            if reached:
+                monster.tx, monster.ty = self._random_point()
+
+        for hazard in self.hazards:
+            hazard.t = (hazard.t + dt / hazard.period) % 1.0
+            phase = 0.5 - 0.5 * math.cos(hazard.t * 2 * math.pi)
+            hazard.cx = hazard.ax + (hazard.bx - hazard.ax) * phase
+            hazard.cy = hazard.ay + (hazard.by - hazard.ay) * phase
+            place(hazard)
+
+        self._update_projectiles(dt)
+        self._check_coins()
+        self._check_damage(dt)
+        self._update_timer(dt)
+        self._update_health_bar()
+
+    def _move_toward(self, sprite, tx, ty, step):
+        dx = tx - sprite.cx
+        dy = ty - sprite.cy
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist <= step or dist == 0:
+            sprite.cx, sprite.cy = tx, ty
+            place(sprite)
+            return True
+        sprite.cx += dx / dist * step
+        sprite.cy += dy / dist * step
+        place(sprite)
+        return False
+
+    def _px(self, sprite):
+        # Pixel center of a sprite based on its normalized center.
+        return (self.world.x + sprite.cx * self.world.width,
+                self.world.y + sprite.cy * self.world.height)
+
+    def _radius(self, sprite):
+        return min(sprite.size_hint[0] * self.world.width,
+                   sprite.size_hint[1] * self.world.height) / 2
+
+    def _overlap(self, a, b, factor=0.8):
+        ax, ay = self._px(a)
+        bx, by = self._px(b)
+        reach = (self._radius(a) + self._radius(b)) * factor
+        return (ax - bx) ** 2 + (ay - by) ** 2 <= reach * reach
+
+    # ----- combat -----
+    def fire(self):
+        if not self.active or self.paused or self.player is None:
+            return
+        if self.cooldown > 0 or not self.monsters:
+            return
+        target = self._nearest_monster()
+        if target is None:
+            return
+        self.cooldown = FIRE_COOLDOWN
+        shot = graphics.Projectile(size_hint=PROJECTILE_SIZE)
+        shot.cx, shot.cy = self.player.cx, self.player.cy
+        shot.target = target
+        place(shot)
+        self.world.add_widget(shot)
+        shot.start()
+        self.projectiles.append(shot)
+        kivy.app.App.get_running_app().audio.play_sfx("shoot")
+
+    def _nearest_monster(self):
+        best = None
+        best_d = 999
+        for monster in self.monsters:
+            d = (monster.cx - self.player.cx) ** 2 + (monster.cy - self.player.cy) ** 2
+            if d < best_d:
+                best_d = d
+                best = monster
+        return best
+
+    def _update_projectiles(self, dt):
+        for shot in list(self.projectiles):
+            target = shot.target if shot.target in self.monsters else self._nearest_monster()
+            if target is not None:
+                shot.target = target
+                self._move_toward(shot, target.cx, target.cy, PROJECTILE_SPEED * dt)
+                if self._overlap(shot, target, factor=0.9):
+                    self._hit_monster(target)
+                    self._remove_projectile(shot)
+                    continue
+            else:
+                shot.cy += PROJECTILE_SPEED * dt
+                place(shot)
+            if shot.cx < -0.1 or shot.cx > 1.1 or shot.cy < -0.1 or shot.cy > 1.1:
+                self._remove_projectile(shot)
+
+    def _remove_projectile(self, shot):
+        if shot in self.projectiles:
+            self.projectiles.remove(shot)
+        shot.stop()
+        if shot.parent:
+            shot.parent.remove_widget(shot)
+
+    def _hit_monster(self, monster):
+        app = kivy.app.App.get_running_app()
+        monster.hp -= 1
+        monster.hit_flash()
+        if monster.hp <= 0:
+            self.kills += 1
+            self.score += KILL_POINTS
+            self._burst(monster, graphics.MONSTER_COLORS.get(int(monster.mtype), (1, 0.4, 0.4)))
+            monster.stop()
+            if monster.parent:
+                monster.parent.remove_widget(monster)
+            if monster in self.monsters:
+                self.monsters.remove(monster)
+            app.audio.play_sfx("monster_death")
+        else:
+            app.audio.play_sfx("hit")
+        self._refresh_hud()
+
+    def _burst(self, sprite, color):
+        cx, cy = self._px(sprite)
+        self.world.add_widget(graphics.ParticleBurst((cx, cy), color=color))
+
+    # ----- coins, damage, timer -----
+    def _check_coins(self):
+        app = kivy.app.App.get_running_app()
+        for coin in list(self.coins):
+            if self._overlap(self.player, coin, factor=0.7):
+                self.coins.remove(coin)
+                coin.stop()
+                if coin.parent:
+                    coin.parent.remove_widget(coin)
+                self.collected += 1
+                self.score += COIN_POINTS
+                app.audio.play_sfx("coin")
+                self._refresh_hud()
+        if not self.coins and self.active:
+            self._win()
+
+    def _check_damage(self, dt):
+        if self.player.dead:
+            return
+        touching = False
+        for monster in self.monsters:
+            if self._overlap(self.player, monster, factor=0.7):
+                touching = True
+                break
+        if not touching:
+            for hazard in self.hazards:
+                if self._overlap(self.player, hazard, factor=0.6):
+                    touching = True
+                    break
+        if touching:
+            self.health -= CONTACT_DAMAGE * dt
+            self.player.hit_flash()
+            if self.health <= 0:
+                self.health = 0
+                self._lose()
+
+    def _update_timer(self, dt):
+        if self.time_left is None:
+            return
+        self.time_left -= dt
+        if self.time_left <= 0:
+            self.time_left = 0
+            self._lose()
+        self._refresh_hud()
+
+    def _refresh_hud(self):
+        total = self.level["coins"]
+        self.coin_label.text = "Coins {}/{}".format(self.collected, total)
+        self.level_label.text = "Level {}".format(self.level["name"])
+        if self.time_left is None:
+            self.time_label.text = ""
+        else:
+            self.time_label.text = "Time {}".format(int(self.time_left))
+
+    # ----- win / lose -----
+    def _score_and_stars(self):
+        score = self.score + int(self.health) * 3
+        if self.time_left is not None:
+            score += int(self.time_left) * TIME_BONUS
+        # stars: finishing = 1, plus health and (when timed) time bonuses
+        stars = 1
+        if self.health >= self.max_health * 0.5:
+            stars += 1
+        if self.health >= self.max_health * 0.85:
+            stars += 1
+        return score, min(stars, 3)
+
+    def _win(self):
+        if not self.active:
+            return
+        self.active = False
+        app = kivy.app.App.get_running_app()
+        app.audio.play_sfx("victory")
+        score, stars = self._score_and_stars()
+        app.state.record_result(self.index, score, stars)
+        next_index = self.index + 1
+        if next_index <= levels.NUM_LEVELS:
+            app.state.unlock_up_to(next_index)
+        buttons = [("Menu", [0.45, 0.45, 0.5, 1], lambda: app.go("levelselect"))]
+        if next_index <= levels.NUM_LEVELS:
+            buttons.append(("Next", [0.2, 0.7, 0.4, 1], lambda: app.start_level(next_index)))
+        lines = ["Score: {}".format(score), "Stars: {}".format("*" * stars)]
+        ResultOverlay("Level Clear!", lines, buttons).open()
+
+    def _lose(self):
+        if not self.active:
+            return
+        self.active = False
+        app = kivy.app.App.get_running_app()
+        if self.player is not None:
+            self.player.dead = True
+        app.audio.play_sfx("death")
+        buttons = [
+            ("Menu", [0.45, 0.45, 0.5, 1], lambda: app.go("levelselect")),
+            ("Retry", [0.9, 0.5, 0.2, 1], lambda: app.start_level(self.index)),
+        ]
+        reason = "Out of time!" if (self.time_left is not None and self.time_left <= 0) else "You were caught!"
+        ResultOverlay(reason, ["Score: {}".format(self.score)], buttons).open()
+
+    # ----- pause -----
+    def _open_pause(self):
+        if not self.active:
+            return
+        self.paused = True
+        app = kivy.app.App.get_running_app()
+
+        def quit_to_menu():
+            self.active = False
+            app.go("levelselect")
+        dialog = ui.ConfirmDialog("Quit to the level menu?\nThis level's progress is lost.",
+                                  quit_to_menu, yes_text="Quit", no_text="Resume")
+        dialog.bind(on_dismiss=lambda *a: self._resume())
+        dialog.open()
+
+    def _resume(self):
+        # Only un-pause if we are still on this level (not quitting).
+        if self.active:
+            self.paused = False
+
 
 class CointexApp(kivy.app.App):
-
-    def on_start(self):
-        music_dir = os.getcwd()+"/music/"
-        self.main_bg_music = kivy.core.audio.SoundLoader.load(music_dir+"bg_music_piano_flute.wav")
-        self.main_bg_music.loop = True
-        self.main_bg_music.play()
-
-        next_level_num, congrats_displayed_once = self.read_game_info()
-        self.activate_levels(next_level_num, congrats_displayed_once)
-
-    def read_game_info(self):
-        try:
-            game_info_file = open("game_info",'rb')
-            game_info = pickle.load(game_info_file)
-            return game_info[0]['lastlvl'], game_info[0]['congrats_displayed_once']
-            game_info_file.close()
-        except:
-            print("CoinTex FileNotFoundError: Game info file is not found. Game starts from level 1.")
-            return 1, False
-
-    def activate_levels(self, next_level_num, congrats_displayed_once):
-        num_levels = len(self.root.screens[0].ids['lvls_imagebuttons'].children)
-
-        levels_imagebuttons = self.root.screens[0].ids['lvls_imagebuttons'].children
-        for i in range(num_levels-next_level_num, num_levels):
-            levels_imagebuttons[i].disabled = False
-            levels_imagebuttons[i].color = [1,1,1,1]
-
-        for i in range(0, num_levels-next_level_num):
-            levels_imagebuttons[i].disabled = True
-            levels_imagebuttons[i].color = [1,1,1,0.5]
-
-        if next_level_num == (num_levels+1) and congrats_displayed_once == False:
-            self.root.current = "alllevelscompleted"
-
-    def screen_on_pre_leave(self, screen_num):
-        curr_screen = self.root.screens[screen_num]
-        for i in range(curr_screen.num_monsters): curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)].pos_hint = {'x': 0.8, 'y': 0.8}
-        curr_screen.ids['character_image_lvl'+str(screen_num)].pos_hint = {'x': 0.0, 'y': 0.0}
-
-        next_level_num, congrats_displayed_once = self.read_game_info()
-        self.activate_levels(next_level_num, congrats_displayed_once)
-
-    def screen_on_pre_enter(self, screen_num):
-        curr_screen = self.root.screens[screen_num]
-        curr_screen.character_killed = False
-        curr_screen.num_coins_collected = 0
-        curr_screen.ids['character_image_lvl'+str(screen_num)].im_num = curr_screen.ids['character_image_lvl'+str(screen_num)].start_im_num
-        for i in range(curr_screen.num_monsters): curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)].im_num = curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)].start_im_num
-        curr_screen.ids['num_coins_collected_lvl'+str(screen_num)].text = "Coins 0/"+str(curr_screen.num_coins)
-        curr_screen.ids['level_number_lvl'+str(screen_num)].text = "Level "+str(screen_num)
-
-        curr_screen.num_collisions_hit = 0
-        remaining_life_percent_lvl_widget = curr_screen.ids['remaining_life_percent_lvl'+str(screen_num)]
-        remaining_life_percent_lvl_widget.size_hint = (remaining_life_percent_lvl_widget.remaining_life_size_hint_x, remaining_life_percent_lvl_widget.size_hint[1])
-
-        for i in range(curr_screen.num_fires): curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)].pos_hint = {'x': 1.1, 'y': 1.1}
-
-        for key, coin in curr_screen.coins_ids.items():
-            curr_screen.ids['layout_lvl'+str(screen_num)].remove_widget(coin)
-        curr_screen.coins_ids = {}
-
-        coin_width = 0.05
-        coin_height = 0.05
-
-        curr_screen = self.root.screens[screen_num]
-
-        section_width = 1.0/curr_screen.num_coins
-        for k in range(curr_screen.num_coins):
-            x = random.uniform(section_width*k, section_width*(k+1)-coin_width)
-            y = random.uniform(0, 1-coin_height)
-            coin = kivy.uix.image.Image(source="other-images/coin.png", size_hint=(coin_width, coin_height), pos_hint={'x': x, 'y': y}, fit_mode="contain")
-            curr_screen.ids['layout_lvl'+str(screen_num)].add_widget(coin, index=-1)
-            curr_screen.coins_ids['coin'+str(k)] = coin
-
-    def screen_on_enter(self, screen_num):
-        music_dir = os.getcwd()+"/music/"
-        self.bg_music = kivy.core.audio.SoundLoader.load(music_dir+"bg_music_piano.wav")
-        self.bg_music.loop = True
-
-        self.coin_sound = kivy.core.audio.SoundLoader.load(music_dir+"coin.wav")
-        self.level_completed_sound = kivy.core.audio.SoundLoader.load(music_dir+"level_completed_flaute.wav")
-        self.char_death_sound = kivy.core.audio.SoundLoader.load(music_dir+"char_death_flaute.wav")
-
-        self.bg_music.play()
-
-        curr_screen = self.root.screens[screen_num]
-        for i in range(curr_screen.num_monsters): 
-            monster_image = curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)]
-            new_pos = (random.uniform(0.0, 1 - monster_image.size_hint[0]/4), random.uniform(0.0, 1 - monster_image.size_hint[1]/4))
-            self.start_monst_animation(monster_image=monster_image, new_pos=new_pos, anim_duration=random.uniform(monster_image.monst_anim_duration_low, monster_image.monst_anim_duration_high))
-
-        for i in range(curr_screen.num_fires): 
-            fire_widget = curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)]
-            self.start_fire_animation(fire_widget=fire_widget, pos=(0.0, 0.5), anim_duration=5.0)
-
-    def start_monst_animation(self, monster_image, new_pos, anim_duration):
-        monst_anim = kivy.animation.Animation(pos_hint={'x': new_pos[0], 'y': new_pos[1]}, im_num=monster_image.end_im_num,duration=anim_duration)
-        monst_anim.bind(on_complete=self.monst_animation_completed)
-        monst_anim.start(monster_image)
-
-    def monst_animation_completed(self, *args):
-        monster_image = args[1]
-        monster_image.im_num = monster_image.start_im_num
-
-        new_pos = (random.uniform(0.0, 1 - monster_image.size_hint[0]/4), random.uniform(0.0, 1 - monster_image.size_hint[1]/4))
-        self.start_monst_animation(monster_image=monster_image, new_pos= new_pos,anim_duration=random.uniform(monster_image.monst_anim_duration_low, monster_image.monst_anim_duration_high))
-
-    def monst_pos_hint(self, monster_image):
-        screen_num = int(monster_image.parent.parent.name[5:])
-        curr_screen = self.root.screens[screen_num]
-        character_image = curr_screen.ids['character_image_lvl'+str(screen_num)]
-
-        character_center = character_image.center
-        monster_center = monster_image.center
-
-        gab_x = character_image.width / 2
-        gab_y = character_image.height / 2
-        if character_image.collide_widget(monster_image) and abs(character_center[0] - monster_center[0]) <= gab_x and abs(character_center[1] - monster_center[1]) <= gab_y:
-            curr_screen.num_collisions_hit = curr_screen.num_collisions_hit + 1
-            life_percent = float(curr_screen.num_collisions_hit)/float(curr_screen.num_collisions_level)
-
-#            life_remaining_percent = 100-round(life_percent, 2)*100
-#            remaining_life_percent_lvl_widget.text = str(int(life_remaining_percent))+"%"
-            remaining_life_percent_lvl_widget=curr_screen.ids['remaining_life_percent_lvl'+str(screen_num)]
-            remaining_life_size_hint_x = remaining_life_percent_lvl_widget.remaining_life_size_hint_x
-            remaining_life_percent_lvl_widget.size_hint =  (remaining_life_size_hint_x-remaining_life_size_hint_x*life_percent, remaining_life_percent_lvl_widget.size_hint[1])
-
-            if curr_screen.num_collisions_hit == curr_screen.num_collisions_level:
-                self.bg_music.stop()
-                self.char_death_sound.play()
-                curr_screen.character_killed = True
-
-                kivy.animation.Animation.cancel_all(character_image)
-                for i in range(curr_screen.num_monsters): kivy.animation.Animation.cancel_all(curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)])
-                for i in range(curr_screen.num_fires): kivy.animation.Animation.cancel_all(curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)])
-
-                character_image.im_num = character_image.dead_start_im_num
-                char_anim = kivy.animation.Animation(im_num=character_image.dead_end_im_num, duration=1.0)
-                char_anim.start(character_image)
-                kivy.clock.Clock.schedule_once(functools.partial(self.back_to_main_screen, curr_screen.parent), 3)
-
-    def change_monst_im(self, monster_image):
-        monster_image.source = "monsters-images/" + str(int(monster_image.im_num)) + ".png"
-
-    def touch_down_handler(self, screen_num, args):
-        curr_screen = self.root.screens[screen_num]
-        if curr_screen.character_killed == False:
-            self.start_char_animation(screen_num, args[1].spos)
-
-    def start_char_animation(self, screen_num, touch_pos):
-        curr_screen = self.root.screens[screen_num]
-        if curr_screen.character_killed:
-            return
-
-        character_image = curr_screen.ids['character_image_lvl'+str(screen_num)]
-        character_image.im_num = character_image.start_im_num
-        char_anim = kivy.animation.Animation(pos_hint={'x': touch_pos[0] - character_image.size_hint[0] / 2,'y': touch_pos[1] - character_image.size_hint[1] / 2}, im_num=character_image.end_im_num, duration=curr_screen.char_anim_duration)
-        char_anim.bind(on_complete=self.char_animation_completed)
-        char_anim.start(character_image)
-
-    def char_animation_completed(self, *args):
-        character_image = args[1]
-        character_image.im_num = character_image.start_im_num
-
-    def char_pos_hint(self, character_image):
-        screen_num = int(character_image.parent.parent.name[5:])
-        character_center = character_image.center
-
-        gab_x = character_image.width / 3
-        gab_y = character_image.height / 3
-        coins_to_delete = []
-        curr_screen = self.root.screens[screen_num]
-
-        for coin_key, curr_coin in curr_screen.coins_ids.items():
-            curr_coin_center = curr_coin.center
-            if character_image.collide_widget(curr_coin) and abs(character_center[0] - curr_coin_center[0]) <= gab_x and abs(character_center[1] - curr_coin_center[1]) <= gab_y: 
-                self.coin_sound.play()
-                coins_to_delete.append(coin_key)
-                curr_screen.ids['layout_lvl'+str(screen_num)].remove_widget(curr_coin)
-                curr_screen.num_coins_collected = curr_screen.num_coins_collected + 1
-                curr_screen.ids['num_coins_collected_lvl'+str(screen_num)].text = "Coins "+str(curr_screen.num_coins_collected)+"/"+str(curr_screen.num_coins)
-                if curr_screen.num_coins_collected == curr_screen.num_coins:
-                    self.bg_music.stop()
-                    self.level_completed_sound.play()
-                    kivy.clock.Clock.schedule_once(functools.partial(self.back_to_main_screen, curr_screen.parent), 3)
-                    for i in range(curr_screen.num_monsters): kivy.animation.Animation.cancel_all(curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)])
-                    for i in range(curr_screen.num_fires): kivy.animation.Animation.cancel_all(curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)])
-
-                    next_level_num, congrats_displayed_once = self.read_game_info()
-                    if (screen_num+1) > next_level_num:
-                        game_info_file = open("game_info",'wb')
-                        pickle.dump([{'lastlvl':screen_num+1, "congrats_displayed_once": False}], game_info_file)
-                        game_info_file.close()
-                    else:
-                        game_info_file = open("game_info",'wb')
-                        pickle.dump([{'lastlvl':next_level_num, "congrats_displayed_once": True}], game_info_file)
-                        game_info_file.close()
-
-        if len(coins_to_delete) > 0:
-            for coin_key in coins_to_delete:
-                del curr_screen.coins_ids[coin_key]
-
-    def change_char_im(self, character_image):
-        character_image.source = "character-images/" + str(int(character_image.im_num)) + ".png"
-
-    def start_fire_animation(self, fire_widget, pos, anim_duration):
-        fire_anim = kivy.animation.Animation(pos_hint=fire_widget.fire_start_pos_hint, duration=fire_widget.fire_anim_duration)+kivy.animation.Animation(pos_hint=fire_widget.fire_end_pos_hint, duration=fire_widget.fire_anim_duration)
-        fire_anim.repeat = True
-        fire_anim.start(fire_widget)
-
-    def fire_pos_hint(self, fire_widget):
-        screen_num = int(fire_widget.parent.parent.name[5:])
-        curr_screen = self.root.screens[screen_num]
-        character_image = curr_screen.ids['character_image_lvl'+str(screen_num)]
-
-        character_center = character_image.center
-        fire_center = fire_widget.center
-
-        gab_x = character_image.width / 3
-        gab_y = character_image.height / 3
-        if character_image.collide_widget(fire_widget) and abs(character_center[0] - fire_center[0]) <= gab_x and abs(character_center[1] - fire_center[1]) <= gab_y:
-            curr_screen.num_collisions_hit = curr_screen.num_collisions_hit + 1
-            life_percent = float(curr_screen.num_collisions_hit)/float(curr_screen.num_collisions_level)
-
-            remaining_life_percent_lvl_widget = curr_screen.ids['remaining_life_percent_lvl'+str(screen_num)]
-#            life_remaining_percent = 100-round(life_percent, 2)*100
-#            remaining_life_percent_lvl_widget.text = str(int(life_remaining_percent))+"%"
-
-            remaining_life_size_hint_x = remaining_life_percent_lvl_widget.remaining_life_size_hint_x
-            remaining_life_percent_lvl_widget.size_hint =  (remaining_life_size_hint_x-remaining_life_size_hint_x*life_percent, remaining_life_percent_lvl_widget.size_hint[1])
-
-            if curr_screen.num_collisions_hit == curr_screen.num_collisions_level:
-                self.bg_music.stop()
-                self.char_death_sound.play()
-                curr_screen.character_killed = True
-
-                kivy.animation.Animation.cancel_all(character_image)
-                for i in range(curr_screen.num_monsters): kivy.animation.Animation.cancel_all(curr_screen.ids['monster'+str(i+1)+'_image_lvl'+str(screen_num)])
-                for i in range(curr_screen.num_fires): kivy.animation.Animation.cancel_all(curr_screen.ids['fire'+str(i+1)+'_lvl'+str(screen_num)])
-
-                character_image.im_num = character_image.dead_start_im_num
-                char_anim = kivy.animation.Animation(im_num=character_image.dead_end_im_num, duration=1.0)
-                char_anim.start(character_image)
-                kivy.clock.Clock.schedule_once(functools.partial(self.back_to_main_screen, curr_screen.parent), 3)
-
-    def back_to_main_screen(self, screenManager, *args):
-        screenManager.current = "main"
-
-    def main_screen_on_enter(self):
-        self.main_bg_music.play()
-
-    def main_screen_on_leave(self):
-        self.main_bg_music.stop()
-
-class ImageButton(kivy.uix.behaviors.ButtonBehavior, kivy.uix.image.Image):  
-    pass
-
-class MainScreen(kivy.uix.screenmanager.Screen):
-    pass
-
-class AboutUs(kivy.uix.screenmanager.Screen):
-    pass
-
-class AllLevelsCompleted(kivy.uix.screenmanager.Screen):
-    pass
-
-class Level1(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 5
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.0
-    num_monsters = 1
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level2(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 8
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.1
-    num_monsters = 1
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level3(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.2
-    num_monsters = 1
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level4(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 10
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.2
-    num_monsters = 1
-    num_fires = 1
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level5(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.3
-    num_monsters = 1
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level6(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.3
-    num_monsters = 1
-    num_fires = 3
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level7(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 10
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.4
-    num_monsters = 3
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 25
-
-class Level8(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.4
-    num_monsters = 2
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 25
-
-class Level9(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.5
-    num_monsters = 2
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 25
-
-class Level10(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 14
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.5
-    num_monsters = 3
-    num_fires = 0
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level11(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.6
-    num_monsters = 2
-    num_fires = 1
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level12(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.6
-    num_monsters = 2
-    num_fires = 1
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level13(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 10
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.7
-    num_monsters = 2
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 20
-
-class Level14(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.7
-    num_monsters = 0
-    num_fires = 6
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level15(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 16
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.8
-    num_monsters = 2
-    num_fires = 3
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level16(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.8
-    num_monsters = 3
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 35
-
-class Level17(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 10
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.3
-    num_monsters = 0
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level18(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.5
-    num_monsters = 3
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level19(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 12
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.2
-    num_monsters = 0
-    num_fires = 6
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level20(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 15
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.1
-    num_monsters = 0
-    num_fires = 8
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level21(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 18
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.3
-    num_monsters = 2
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level22(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.3
-    num_monsters = 2
-    num_fires = 4
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level23(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 25
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.1
-    num_monsters = 2
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-class Level24(kivy.uix.screenmanager.Screen):
-    character_killed = False
-    num_coins = 20
-    num_coins_collected = 0
-    coins_ids = {}
-    char_anim_duration = 1.1
-    num_monsters = 3
-    num_fires = 2
-    num_collisions_hit = 0
-    num_collisions_level = 30
-
-app = CointexApp()
-app.title = "CoinTex"
-app.icon = 'cointex_logo.png'
-app.run()
+    def build(self):
+        self.title = "CoinTex"
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        legacy = os.path.join(app_dir, "game_info")
+        self.state = GameState(self.user_data_dir, legacy_game_info=legacy)
+        self.audio = AudioManager(os.path.join(app_dir, "music"), self.state.get_setting)
+        self.current_world = 1
+        self.current_level_index = 1
+
+        self.sm = ScreenManager(transition=FadeTransition(duration=0.25))
+        self.sm.add_widget(ui.MenuScreen(name="menu"))
+        self.sm.add_widget(ui.WorldMapScreen(name="worldmap"))
+        self.sm.add_widget(ui.LevelSelectScreen(name="levelselect"))
+        self.sm.add_widget(ui.SettingsScreen(name="settings"))
+        self.sm.add_widget(ui.AboutScreen(name="about"))
+        self.game = GameScreen(name="game")
+        self.sm.add_widget(self.game)
+        return self.sm
+
+    def go(self, name):
+        self.sm.current = name
+
+    def open_world(self, world):
+        self.current_world = world
+        self.go("levelselect")
+
+    def start_level(self, index):
+        self.current_level_index = index
+        self.current_world = levels.get_level(index)["world"]
+        self.game.load_level(index)
+        self.go("game")
+
+
+if __name__ == "__main__":
+    CointexApp().run()

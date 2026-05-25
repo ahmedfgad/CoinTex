@@ -13,7 +13,7 @@ An iPhone cannot install an `.ipa` on its own. You install it once from a comput
 
 ## Steps
 
-1. On the computer, install Sideloadly from https://sideloadly.io. On Windows, also install iTunes from https://www.apple.com/itunes (use the version from Apple's website, not the one from the Microsoft Store) so the computer can connect to your iPhone. On a Mac you do not need iTunes.
+1. On the computer, install Sideloadly from https://sideloadly.io. On Windows, also install iTunes from https://www.apple.com/itunes (use the version from Apple's website, not the one from the Microsoft Store) so the computer can connect to your iPhone. On a Mac you do not need iTunes. You may also need iCloud on Windows. Just follow the SideLoadly instructions and you will be fine.
 2. Connect the iPhone to the computer with the cable. Unlock the phone, and if it asks "Trust this computer?", tap Trust.
 3. Open Sideloadly. Your iPhone shows up at the top of the window.
 4. Drag the CoinTex `.ipa` into the Sideloadly window, or click the file box and choose it.
@@ -29,6 +29,13 @@ The first time, iOS may say the developer is not trusted.
 2. Tap your Apple ID under Developer App.
 3. Tap Trust.
 4. Open CoinTex. It is ready to play.
+
+You may need to enable the Developer mode too:
+1. Open Settings, then Privacy & Security
+2. Scroll down to the Developer Mode option.
+3. Switch it to On.
+
+This might ask you to restart your device.
 
 ## Good to know
 

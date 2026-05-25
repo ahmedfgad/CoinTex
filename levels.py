@@ -125,6 +125,43 @@ def get_level(index):
     return LEVELS[index - 1]
 
 
+# The level id used for 2-player games. It is a string so it can never be
+# mistaken for a campaign level number (1..60).
+MP_LEVEL = "mp"
+
+
+def get_mp_level(seed=None):
+    # A single arena used for 2-player games. It is not part of the 1..60
+    # campaign and never changes a player's progress. Entity counts are kept
+    # modest so the action stays smooth over a network, and there is no chasing
+    # or pulsing fire in this first version so both screens stay predictable.
+    # The seed makes both devices lay the arena out the same way.
+    return {
+        "index": MP_LEVEL,
+        "world": 6,
+        "world_index": 0,
+        "name": "Arena",
+        "coins": 22,
+        "monsters": 2,
+        "monster_hp": 1,
+        "monster_speed": 1.2,
+        "fires": 2,
+        "fire_speed": 3.5,
+        "enemy_speed_mult": 1.0,
+        "chase_range": 0.0,
+        "chase_time": 0.0,
+        "pulse_amp": 0.0,
+        "pulse_period": 2.0,
+        "contact_damage": 50.0,
+        "gun_reload": True,
+        "time_limit": 120,
+        "player_health": 80,
+        "ammo": 1,
+        "freezers": 0,
+        "seed": seed,
+    }
+
+
 def levels_in_world(world):
     return [lvl for lvl in LEVELS if lvl["world"] == world]
 

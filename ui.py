@@ -16,6 +16,7 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.slider import Slider
 from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.textinput import TextInput
 from kivy.graphics import Color, RoundedRectangle, Rectangle, Ellipse
 from kivy.metrics import sp, dp
 from kivy.clock import Clock
@@ -23,6 +24,7 @@ from kivy.properties import ListProperty, NumericProperty, BooleanProperty
 
 import graphics
 import levels
+import net
 
 ABOUT_TEXT = (
     "CoinTex\n"
@@ -40,6 +42,10 @@ ABOUT_TEXT = (
     "Tap the Auto button during a level to let the game play itself. A small "
     "genetic algorithm takes over and steers to the coins while keeping clear of "
     "monsters and fire. Tap it again to take back control.\n"
+    "\n"
+    "Multiplayer lets two people play together over the network. One device "
+    "hosts and shows its address, the other joins with it. You can team up to "
+    "clear the coins together or compete to collect the most.\n"
     "\n"
     "Created by Ahmed Fawzy Gad.\n"
     "Email: ahmed.f.gad@gmail.com\n"
@@ -163,16 +169,19 @@ class MenuScreen(StyledScreen):
         box.add_widget(Label(text="CoinTex", font_size=sp(60), bold=True,
                              color=[1, 0.85, 0.2, 1], size_hint_y=0.4))
         play = StyledButton(text="Play", bg=[0.2, 0.7, 0.4, 1])
+        multiplayer = StyledButton(text="Multiplayer", bg=[0.55, 0.4, 0.8, 1])
         how = StyledButton(text="How to play", bg=[0.9, 0.6, 0.2, 1])
         guide = StyledButton(text="Guide", bg=[0.85, 0.5, 0.25, 1])
         about = StyledButton(text="About", bg=[0.25, 0.5, 0.9, 1])
         settings = StyledButton(text="Settings", bg=[0.4, 0.45, 0.55, 1])
         play.bind(on_release=lambda *a: app().go("worldmap"))
+        multiplayer.bind(on_release=lambda *a: app().go("multiplayer"))
         how.bind(on_release=lambda *a: app().go("tutorial"))
         guide.bind(on_release=lambda *a: app().go("guide"))
         about.bind(on_release=lambda *a: app().go("about"))
         settings.bind(on_release=lambda *a: app().go("settings"))
         box.add_widget(play)
+        box.add_widget(multiplayer)
         box.add_widget(how)
         box.add_widget(guide)
         box.add_widget(about)
@@ -864,3 +873,246 @@ class AutoPlayerScreen(StyledScreen):
             btn.bg = [0.2, 0.7, 0.4, 1] if key == style else [0.35, 0.4, 0.5, 1]
         for key, btn in self.speed_btns.items():
             btn.bg = [0.2, 0.7, 0.4, 1] if key == speed else [0.35, 0.4, 0.5, 1]
+
+
+class MultiplayerMenuScreen(StyledScreen):
+    # Pick whether to host a game or join one.
+    def build(self):
+        box = BoxLayout(orientation="vertical", padding=dp(30), spacing=dp(20),
+                        size_hint=(0.7, 0.8), pos_hint={"center_x": 0.5, "center_y": 0.5})
+        box.add_widget(Label(text="Multiplayer", font_size=sp(44), bold=True,
+                             color=[1, 0.85, 0.2, 1], size_hint_y=0.3))
+        info = Label(text="Play with a friend over the network.\n"
+                          "One device hosts and the other joins with the host's address.",
+                     font_size=sp(16), color=[1, 1, 1, 0.9], halign="center",
+                     valign="middle", size_hint_y=0.22)
+        info.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
+        box.add_widget(info)
+        host = StyledButton(text="Host Game", bg=[0.2, 0.7, 0.4, 1])
+        join = StyledButton(text="Join Game", bg=[0.25, 0.5, 0.9, 1])
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1])
+        host.bind(on_release=lambda *a: app().go("mphost"))
+        join.bind(on_release=lambda *a: app().go("mpjoin"))
+        back.bind(on_release=lambda *a: app().go("menu"))
+        for b in (host, join, back):
+            box.add_widget(b)
+        self.root_layout.add_widget(box)
+
+    def on_enter(self):
+        app().audio.play_menu_music()
+
+
+class HostScreen(StyledScreen):
+    # Hosts a 2-player game: shows this device's address, lets the host pick the
+    # game type, waits for a player to join, then starts.
+    MODES = [("coop", "Co-op"), ("versus", "Versus")]
+
+    def build(self):
+        self.net = None
+        self._poll = None
+        self._ready = False
+        self._handed_off = False
+        box = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(12),
+                        size_hint=(0.82, 0.92), pos_hint={"center_x": 0.5, "center_y": 0.5})
+        box.add_widget(Label(text="Host a Game", font_size=sp(34), bold=True,
+                             color=[1, 1, 1, 1], size_hint_y=0.12))
+        self.addr_label = Label(text="", font_size=sp(20), bold=True, color=[0.6, 0.95, 1, 1],
+                                halign="center", valign="middle", size_hint_y=0.16)
+        self.addr_label.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
+        box.add_widget(self.addr_label)
+        box.add_widget(Label(text="Game type", font_size=sp(18), bold=True,
+                             size_hint_y=0.08, color=[1, 1, 1, 1]))
+        self.mode_btns = {}
+        row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=0.14)
+        for key, label in self.MODES:
+            b = StyledButton(text=label, font_size=sp(18))
+            b.bind(on_release=lambda w, k=key: self._set_mode(k))
+            self.mode_btns[key] = b
+            row.add_widget(b)
+        box.add_widget(row)
+        self.status = Label(text="", font_size=sp(17), color=[1, 1, 1, 0.9], size_hint_y=0.12)
+        box.add_widget(self.status)
+        self.start_btn = StyledButton(text="Start", bg=[0.3, 0.3, 0.35, 1], size_hint_y=0.14)
+        self.start_btn.bind(on_release=lambda *a: self._start())
+        self.start_btn.disabled = True
+        box.add_widget(self.start_btn)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.12)
+        back.bind(on_release=lambda *a: self._leave())
+        box.add_widget(back)
+        self.root_layout.add_widget(box)
+
+    def on_enter(self):
+        app().audio.play_menu_music()
+        self._ready = False
+        self._handed_off = False
+        self.start_btn.disabled = True
+        self.start_btn.bg = [0.3, 0.3, 0.35, 1]
+        self.status.text = "Waiting for a player to join..."
+        self._refresh_mode()
+        self.net = net.NetHost()
+        try:
+            self.net.start_listening()
+            self.addr_label.text = "Your address\n{}   port {}".format(
+                net.get_local_ip(), self.net.port)
+        except Exception as error:
+            self.addr_label.text = "Could not start hosting."
+            self.status.text = str(error)
+        self._poll = Clock.schedule_interval(self._check, 0.2)
+
+    def on_leave(self):
+        if self._poll is not None:
+            self._poll.cancel()
+            self._poll = None
+        if self.net is not None and not self._handed_off:
+            self.net.stop()
+        if not self._handed_off:
+            self.net = None
+
+    def _set_mode(self, key):
+        app().state.set_setting("mp_mode", key)
+        self._refresh_mode()
+
+    def _refresh_mode(self):
+        current = app().state.get_setting("mp_mode")
+        for key, btn in self.mode_btns.items():
+            btn.bg = [0.2, 0.7, 0.4, 1] if key == current else [0.35, 0.4, 0.5, 1]
+
+    def _check(self, dt):
+        if self.net is None:
+            return
+        while True:
+            try:
+                msg = self.net.inbox.get_nowait()
+            except Exception:
+                break
+            kind = msg.get("t")
+            if kind == "_connected":
+                self.status.text = "A player is connecting..."
+            elif kind == "hello":
+                if msg.get("version") != net.PROTOCOL_VERSION:
+                    self.status.text = "That player has a different game version."
+                    self.net.stop()
+                    self.net = None
+                    return
+                self._ready = True
+                self.status.text = "A player joined. Tap Start."
+                self.start_btn.disabled = False
+                self.start_btn.bg = [0.2, 0.7, 0.4, 1]
+            elif kind in ("leave", "_disconnected"):
+                self._ready = False
+                self.status.text = "The player left. Waiting again..."
+                self.start_btn.disabled = True
+                self.start_btn.bg = [0.3, 0.3, 0.35, 1]
+
+    def _start(self):
+        if not self._ready or self.net is None:
+            return
+        mode = app().state.get_setting("mp_mode")
+        seed = random.randint(1, 2000000000)
+        self.net.send_start(mode, levels.MP_LEVEL, seed)
+        self._handed_off = True
+        app().start_mp_host(mode, seed, self.net)
+
+    def _leave(self):
+        if self.net is not None and not self._handed_off:
+            self.net.stop()
+            self.net = None
+        app().go("multiplayer")
+
+
+class JoinScreen(StyledScreen):
+    # Joins a hosted game by typing the host's address.
+    def build(self):
+        self.net = None
+        self._poll = None
+        self._handed_off = False
+        box = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(14),
+                        size_hint=(0.82, 0.82), pos_hint={"center_x": 0.5, "center_y": 0.5})
+        box.add_widget(Label(text="Join a Game", font_size=sp(34), bold=True,
+                             color=[1, 1, 1, 1], size_hint_y=0.16))
+        prompt = Label(text="Type the host's address (shown on the host's screen):",
+                       font_size=sp(16), color=[1, 1, 1, 0.9], halign="center",
+                       valign="middle", size_hint_y=0.14)
+        prompt.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
+        box.add_widget(prompt)
+        self.ip_input = TextInput(text="", multiline=False, font_size=sp(22),
+                                  size_hint_y=0.16, write_tab=False)
+        box.add_widget(self.ip_input)
+        self.status = Label(text="", font_size=sp(17), color=[1, 1, 1, 0.9], size_hint_y=0.12)
+        box.add_widget(self.status)
+        self.connect_btn = StyledButton(text="Connect", bg=[0.2, 0.7, 0.4, 1], size_hint_y=0.16)
+        self.connect_btn.bind(on_release=lambda *a: self._connect())
+        box.add_widget(self.connect_btn)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.14)
+        back.bind(on_release=lambda *a: self._leave())
+        box.add_widget(back)
+        self.root_layout.add_widget(box)
+
+    def on_enter(self):
+        app().audio.play_menu_music()
+        self._handed_off = False
+        self.status.text = ""
+        self.connect_btn.disabled = False
+        self.ip_input.text = app().state.get_setting("mp_last_ip") or ""
+
+    def on_leave(self):
+        if self._poll is not None:
+            self._poll.cancel()
+            self._poll = None
+        if self.net is not None and not self._handed_off:
+            self.net.stop()
+        if not self._handed_off:
+            self.net = None
+
+    def _connect(self):
+        ip = self.ip_input.text.strip()
+        if not ip:
+            self.status.text = "Please type the host's address."
+            return
+        self.status.text = "Connecting..."
+        self.connect_btn.disabled = True
+        self.net = net.NetClient()
+        self.net.connect(ip, net.DEFAULT_PORT)
+        if self._poll is None:
+            self._poll = Clock.schedule_interval(self._check, 0.1)
+
+    def _check(self, dt):
+        if self.net is None:
+            return
+        while True:
+            try:
+                msg = self.net.inbox.get_nowait()
+            except Exception:
+                break
+            kind = msg.get("t")
+            if kind == "_connect_failed":
+                self.status.text = "Could not connect. Check the address and Wi-Fi."
+                self.connect_btn.disabled = False
+                self.net.stop()
+                self.net = None
+                return
+            elif kind == "_connected":
+                self.status.text = "Connected. Waiting for the host to start..."
+            elif kind == "start":
+                if msg.get("version") != net.PROTOCOL_VERSION:
+                    self.status.text = "The host has a different game version."
+                    self.connect_btn.disabled = False
+                    self.net.stop()
+                    self.net = None
+                    return
+                app().state.set_setting("mp_last_ip", self.ip_input.text.strip())
+                self._handed_off = True
+                app().start_mp_client(msg.get("mode", "coop"), msg.get("seed", 0), self.net)
+                return
+            elif kind in ("leave", "_disconnected"):
+                self.status.text = "The host closed the game."
+                self.connect_btn.disabled = False
+                self.net.stop()
+                self.net = None
+                return
+
+    def _leave(self):
+        if self.net is not None and not self._handed_off:
+            self.net.stop()
+            self.net = None
+        app().go("multiplayer")

@@ -1,0 +1,222 @@
+# Networking for CoinTex 2-player games.
+#
+# One device hosts a game and another joins it using the host's IP address. The
+# host runs the real game and is in charge of it. The joining device sends its
+# taps and gunshots to the host and draws whatever the host sends back. Each
+# message is JSON with a 4-byte length in front, so both sides know where one
+# message ends and the next begins.
+#
+# This uses only the Python standard library (socket, threading, json, struct,
+# queue), so the Android and iOS builds need no extra packages.
+#
+# Threads here never touch the game widgets. They only read and write sockets
+# and put decoded messages on an inbox Queue. The game drains that inbox on its
+# normal loop, on the main thread, which is the same approach autoplay.py uses.
+
+import json
+import socket
+import struct
+import threading
+import queue
+
+DEFAULT_PORT = 50007
+PROTOCOL_VERSION = 1
+CONNECT_TIMEOUT = 6.0           # seconds to wait when joining a host
+MAX_FRAME = 1024 * 1024         # drop a peer that announces a frame bigger than this
+_HEADER = struct.Struct(">I")   # 4-byte big-endian length prefix
+
+
+def pack_message(obj):
+    # Turn a Python object into a length-prefixed JSON frame ready to send.
+    data = json.dumps(obj).encode("utf-8")
+    return _HEADER.pack(len(data)) + data
+
+
+def get_local_ip():
+    # Find this device's address on the local network so the host can show it.
+    # Connecting a UDP socket sends nothing; it just picks the network card that
+    # would be used to reach the internet and reports its address. Falls back to
+    # the loopback address if there is no network.
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("8.8.8.8", 80))
+        ip = probe.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        probe.close()
+    return ip
+
+
+def _recv_loop(sock, inbox, on_closed):
+    # Read framed JSON messages from sock and put each decoded one on inbox.
+    # Runs on its own thread and calls on_closed when the link ends.
+    buffer = bytearray()
+    need = None
+    try:
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            buffer.extend(chunk)
+            while True:
+                if need is None:
+                    if len(buffer) < _HEADER.size:
+                        break
+                    need = _HEADER.unpack(bytes(buffer[:_HEADER.size]))[0]
+                    del buffer[:_HEADER.size]
+                    if need > MAX_FRAME:
+                        raise ValueError("frame too large")
+                if len(buffer) < need:
+                    break
+                payload = bytes(buffer[:need])
+                del buffer[:need]
+                need = None
+                try:
+                    inbox.put(json.loads(payload.decode("utf-8")))
+                except Exception:
+                    # Skip a single bad message rather than dropping the link.
+                    continue
+    except Exception:
+        pass
+    finally:
+        on_closed()
+
+
+class _Link:
+    # Shared send and close behavior for one TCP connection.
+    def __init__(self):
+        self.inbox = queue.Queue()
+        self.sock = None
+        self._send_lock = threading.Lock()
+        self._closed = False
+
+    def _start_reader(self):
+        threading.Thread(target=_recv_loop,
+                         args=(self.sock, self.inbox, self._on_closed),
+                         daemon=True).start()
+
+    def _on_closed(self):
+        # Tell the game the link dropped, but only if we did not close on purpose.
+        if not self._closed:
+            self._closed = True
+            self.inbox.put({"t": "_disconnected"})
+
+    def send(self, obj):
+        sock = self.sock
+        if sock is None or self._closed:
+            return
+        try:
+            with self._send_lock:
+                sock.sendall(pack_message(obj))
+        except Exception:
+            self._on_closed()
+
+    def stop(self):
+        # Safe to call more than once.
+        self._closed = True
+        sock = self.sock
+        self.sock = None
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
+class NetHost(_Link):
+    # Waits for one joining player, then exchanges messages with them.
+    def __init__(self, port=DEFAULT_PORT):
+        super().__init__()
+        self.port = port
+        self.connected = False
+        self._server = None
+
+    def start_listening(self):
+        self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._server.bind(("0.0.0.0", self.port))
+        self._server.listen(1)
+        threading.Thread(target=self._accept_loop, daemon=True).start()
+
+    def _accept_loop(self):
+        server = self._server
+        if server is None:
+            return
+        try:
+            client, _addr = server.accept()
+        except Exception:
+            return
+        finally:
+            try:
+                server.close()
+            except Exception:
+                pass
+            self._server = None
+        if self._closed:
+            try:
+                client.close()
+            except Exception:
+                pass
+            return
+        self.sock = client
+        self.connected = True
+        self._start_reader()
+        self.inbox.put({"t": "_connected"})
+
+    def send_state(self, snapshot):
+        self.send(snapshot)
+
+    def send_event(self, kind, name="", data=None):
+        self.send({"t": "event", "kind": kind, "name": name, "data": data or {}})
+
+    def send_start(self, mode, level, seed):
+        self.send({"t": "start", "version": PROTOCOL_VERSION,
+                   "mode": mode, "level": level, "seed": seed})
+
+    def stop(self):
+        server = self._server
+        self._server = None
+        if server is not None:
+            try:
+                server.close()
+            except Exception:
+                pass
+        super().stop()
+
+
+class NetClient(_Link):
+    # Joins a host at the given IP and exchanges messages with it.
+    def connect(self, ip, port=DEFAULT_PORT):
+        # The connect itself can block, so do it on a thread and report the
+        # result through inbox. The UI stays responsive either way.
+        threading.Thread(target=self._connect, args=(ip, port), daemon=True).start()
+
+    def _connect(self, ip, port):
+        try:
+            sock = socket.create_connection((ip, port), timeout=CONNECT_TIMEOUT)
+            sock.settimeout(None)
+        except Exception as error:
+            self.inbox.put({"t": "_connect_failed", "why": str(error)})
+            return
+        if self._closed:
+            try:
+                sock.close()
+            except Exception:
+                pass
+            return
+        self.sock = sock
+        self._start_reader()
+        self.send({"t": "hello", "version": PROTOCOL_VERSION})
+        self.inbox.put({"t": "_connected"})
+
+    def send_input(self, tx, ty, fire=False):
+        self.send({"t": "input", "tx": round(tx, 4), "ty": round(ty, 4),
+                   "fire": bool(fire)})
+
+    def send_leave(self):
+        self.send({"t": "leave"})

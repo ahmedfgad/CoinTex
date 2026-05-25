@@ -23,8 +23,12 @@ source.exclude_dirs = bin, venv, .venv, .buildozer, .git, __pycache__, PlayerGA,
 # Version shown to users.
 version = 1.3
 
-# Packages the app needs. The release game only needs Kivy.
+# Packages the app needs. The release game only needs Kivy. The 2-player
+# networking uses the Python standard library, so nothing is added here.
 requirements = python3,kivy
+
+# The 2-player feature opens a network connection between the two devices.
+android.permissions = INTERNET
 
 # Splash image shown while the app starts.
 presplash.filename = %(source.dir)s/cointex_presplash.png

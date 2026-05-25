@@ -14,6 +14,7 @@ Every screen, all of the graphics and all of the sound are generated in code, so
 - [How to play](#how-to-play)
 - [Worlds](#worlds)
 - [Auto Player (a genetic algorithm plays for you)](#auto-player-a-genetic-algorithm-plays-for-you)
+- [Multiplayer](#multiplayer)
 - [Screenshots](#screenshots)
 - [Run from source](#run-from-source)
 - [Build the apps](#build-the-apps)
@@ -78,6 +79,14 @@ You can tune how it plays from Settings, then Auto Player:
 - Reaction speed: Slow, Normal or Fast (how often it re-decides).
 
 The agent is plain Python and adds no extra dependencies, so it ships inside the app on every platform. A separate, research oriented version that searches with [PyGAD](https://github.com/ahmedfgad/GeneticAlgorithmPython) lives in the `PlayerGA` folder.
+
+## Multiplayer
+
+Two people can play together over the network. From the main menu open Multiplayer, then one player taps Host Game and the other taps Join Game. The host picks the game type and its device shows an address; the joining player types that address to connect. Both then play in the same arena.
+
+There are two game types, chosen by the host. In Co-op you share one goal and clear all the coins together before the timer runs out. In Versus you race for the same coins and whoever collects the most wins.
+
+The simplest setup is two devices on the same Wi-Fi, where the host's address is a local one like 192.168.x.x. Playing across the internet works too, but the host has to forward TCP port 50007 on their router to their device, since the connection is made straight to the host. The networking uses only the Python standard library, so it adds no extra packages to the build.
 
 ## Screenshots
 

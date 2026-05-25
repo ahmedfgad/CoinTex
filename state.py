@@ -25,6 +25,8 @@ DEFAULT_SETTINGS = {
     "intro_seen_w4": False,
     "intro_seen_w5": False,
     "intro_seen_w6": False,
+    "mp_mode": "coop",        # 2-player: coop | versus, chosen by the host
+    "mp_last_ip": "",         # the host address the joiner typed last time
 }
 
 SAVE_NAME = "cointex_save.json"

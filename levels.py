@@ -12,7 +12,7 @@
 #   monster count  : 1  ->   7
 #   monster hp     : 1  ->   3   (worlds 1-2 = 1 hit, 3-4 = 2 hits, 5-6 = 3 hits)
 #   monster speed  : slow -> fast (move duration 2.0s -> ~0.8s, lower is faster)
-#   fire count     : 0  ->  10
+#   fire count     : 1  ->  12
 #   fire speed     : slow -> fast (sweep duration 6.0s -> 2.0s)
 #   time limit     : none for worlds 1-2, then a shrinking limit
 #   player health  : stays at 100; the pressure comes from the knobs above
@@ -49,7 +49,7 @@ def build_levels():
         monster_count = _clamp(1 + (g - 1) // 9, 1, 7)
         monster_hp = _clamp(1 + (g - 1) // 20, 1, 3)
         monster_speed = round(_clamp(2.0 - (g - 1) * 0.02, 0.8, 2.0), 2)
-        fire_count = _clamp((g - 1) // 5, 0, 10)
+        fire_count = _clamp(1 + (g - 1) // 5, 1, 12)
         fire_speed = round(_clamp(6.0 - (g - 1) * 0.07, 2.0, 6.0), 2)
 
         if g <= 20:

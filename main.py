@@ -103,6 +103,7 @@ class GameScreen(Screen):
         self.pending_respawns = []   # seconds left before each killed monster returns
         self.ammo = 0
         self.freeze_time = 0.0
+        self._damage_sfx_cd = 0.0
         self._update_event = None
         # Auto play: the built-in genetic algorithm can take over from the player.
         self.auto_mode = False
@@ -186,6 +187,7 @@ class GameScreen(Screen):
         self.kills = 0
         self.collected = 0
         self.cooldown = 0.0
+        self._damage_sfx_cd = 0.0
         self.time_left = self.level["time_limit"]
         self.ammo = self.level["ammo"]
         self.freeze_time = 0.0
@@ -557,6 +559,8 @@ class GameScreen(Screen):
     def _check_damage(self, dt):
         if self.player.dead:
             return
+        if self._damage_sfx_cd > 0:
+            self._damage_sfx_cd -= dt
         touching = False
         if self.freeze_time <= 0:  # frozen monsters do not hurt the player
             for monster in self.monsters:
@@ -571,6 +575,11 @@ class GameScreen(Screen):
         if touching:
             self.health -= CONTACT_DAMAGE * dt
             self.player.hit_flash()
+            # Play the hurt sound, but not every frame. While the player keeps
+            # touching a monster or fire, repeat it on a short cadence.
+            if self._damage_sfx_cd <= 0:
+                kivy.app.App.get_running_app().audio.play_sfx("damage")
+                self._damage_sfx_cd = 0.4
             if self.health <= 0:
                 self.health = 0
                 self._lose()

@@ -58,27 +58,6 @@ rm -rf build dist CoinTex.spec
 MODE="--onefile"
 [[ "$ONEFILE" -eq 0 ]] && MODE="--onedir"
 
-# On Windows, PyInstaller sometimes misses the libffi DLL that Python's ctypes
-# module needs (this is common with conda Python). Without it the built app
-# fails with a "_ctypes" DLL error and cannot open a window. Find that DLL next
-# to the Python that built the venv and bundle it so the executable works.
-EXTRA=()
-if [[ "$OS" == "windows" ]]; then
-    BASE="$("$PY" -c "import sys; print(sys.base_prefix.replace(chr(92), '/'))")"
-    FFI="$(ls "$BASE"/Library/bin/libffi*.dll "$BASE"/DLLs/libffi*.dll "$BASE"/libffi*.dll 2>/dev/null | head -1)"
-    if [[ -z "$FFI" ]]; then
-        FFI="$(find "$BASE" -maxdepth 3 -iname 'libffi*.dll' 2>/dev/null | head -1)"
-    fi
-    if [[ -n "$FFI" && -f "$FFI" ]]; then
-        echo "Bundling ctypes dependency: $FFI"
-        EXTRA+=(--add-binary "$FFI;.")
-    else
-        echo "WARNING: could not find a libffi DLL under $BASE."
-        echo "If the .exe fails with a _ctypes DLL error, build with Python from"
-        echo "python.org instead of conda."
-    fi
-fi
-
 # The game draws everything in code, so the only data to bundle is the music and
 # sound files in music/. PyInstaller finds the Python modules on its own, and
 # Kivy ships its own PyInstaller hooks so its providers are included.
@@ -87,7 +66,6 @@ echo "Running PyInstaller ($MODE)"
     --noconfirm --clean $MODE --windowed \
     --name CoinTex \
     --add-data "music${SEP}music" \
-    ${EXTRA[@]+"${EXTRA[@]}"} \
     main.py
 
 echo ""

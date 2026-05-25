@@ -31,7 +31,7 @@ from audio import AudioManager
 PLAYER_SPEED = 0.6          # how fast the player moves, screens per second
 PROJECTILE_SPEED = 1.2
 FIRE_COOLDOWN = 0.45        # seconds between shots
-CONTACT_DAMAGE = 32.0       # health lost per second while touching a monster/fire
+CONTACT_DAMAGE = 42.0       # health lost per second while touching a monster/fire
 COIN_POINTS = 100
 KILL_POINTS = 150
 TIME_BONUS = 4              # score per second left when a level has a time limit
@@ -225,9 +225,8 @@ class GameScreen(Screen):
 
     # ----- screen lifecycle -----
     def on_enter(self):
-        app = kivy.app.App.get_running_app()
-        if self.level is not None:
-            app.audio.play_level_music(self.level["world"])
+        # Level music is started in load_level (one place only) to avoid playing
+        # the same looping track twice. Here we just start the loop and keys.
         if self._update_event is None:
             self._update_event = Clock.schedule_interval(self.update, 1 / 60.0)
         Window.bind(on_key_down=self._on_key)
@@ -237,6 +236,7 @@ class GameScreen(Screen):
             self._update_event.cancel()
             self._update_event = None
         Window.unbind(on_key_down=self._on_key)
+        kivy.app.App.get_running_app().audio.stop_music()
         self._clear_sprites()
 
     def _on_key(self, window, key, scancode, codepoint, modifiers):
@@ -290,9 +290,14 @@ class GameScreen(Screen):
         if dist <= step or dist == 0:
             sprite.cx, sprite.cy = tx, ty
             place(sprite)
+            sprite.moving = False
             return True
-        sprite.cx += dx / dist * step
-        sprite.cy += dy / dist * step
+        ux, uy = dx / dist, dy / dist
+        # Point the sprite where it is heading so the art reflects direction.
+        sprite.face_x, sprite.face_y = ux, uy
+        sprite.moving = True
+        sprite.cx += ux * step
+        sprite.cy += uy * step
         place(sprite)
         return False
 

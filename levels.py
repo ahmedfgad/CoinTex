@@ -69,7 +69,9 @@ def build_levels():
             "fires": fire_count,
             "fire_speed": fire_speed,
             "time_limit": time_limit,
-            "player_health": 100,
+            # Health shrinks from 60 down to 30 across the game, so touching a
+            # monster or fire matters much more in later levels.
+            "player_health": _clamp(60 - (g - 1) // 2, 30, 60),
         })
     return levels
 
@@ -100,5 +102,6 @@ def difficulty_score(level):
         + (2.2 - level["monster_speed"]) * 8.0
         + level["fires"] * 2.0
         + (6.5 - level["fire_speed"]) * 2.0
+        + (60 - level["player_health"]) * 0.3
         + time_pressure
     )

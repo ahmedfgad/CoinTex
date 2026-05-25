@@ -29,9 +29,11 @@ ABOUT_TEXT = (
     "There are 6 worlds with 10 levels each. The further you go, the more "
     "monsters and hazards you face.\n"
     "\n"
+    "CoinTex is built 100% with Python using the Kivy framework. Every screen, "
+    "all the graphics and the sound are made in code.\n"
+    "\n"
     "Created by Ahmed Fawzy Gad.\n"
-    "Email: ahmed.f.gad@gmail.com\n"
-    "Music by the author. All graphics are drawn in code."
+    "Email: ahmed.f.gad@gmail.com"
 )
 
 
@@ -185,12 +187,14 @@ class LevelSelectScreen(StyledScreen):
             index = lvl["index"]
             unlocked = running.state.is_unlocked(index)
             stars = running.state.get_stars(index)
+            # Show the world and level number on every button, locked or not.
+            label = "W{} L{}".format(lvl["world"], lvl["world_index"])
             if unlocked:
-                text = "{}\n{}".format(lvl["world_index"], "*" * stars if stars else "")
+                text = label + ("\n" + "*" * stars if stars else "")
                 btn = StyledButton(text=text, bg=[0.25, 0.55, 0.9, 1], halign="center")
                 btn.bind(on_release=lambda b, i=index: running.start_level(i))
             else:
-                btn = StyledButton(text="X", bg=[0.3, 0.3, 0.35, 1])
+                btn = StyledButton(text=label + "\nLocked", bg=[0.3, 0.3, 0.35, 1], halign="center")
             self.grid.add_widget(btn)
 
 

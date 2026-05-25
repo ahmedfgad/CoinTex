@@ -37,18 +37,35 @@ def _unregister(sprite):
         _anim_event = None
 
 
+def _dir_triangle(bx, by, dx, dy, length, half_width):
+    # A triangle whose tip points along (dx, dy) from a base centered at (bx, by).
+    tip_x, tip_y = bx + dx * length, by + dy * length
+    px, py = -dy, dx
+    Triangle(points=[tip_x, tip_y,
+                     bx + px * half_width, by + py * half_width,
+                     bx - px * half_width, by - py * half_width])
+
+
 class CanvasSprite(Widget):
-    # Base class: holds an animation phase and a hit-flash value, and redraws
-    # whenever they (or the size/position) change.
+    # Base class: holds an animation phase, a hit-flash value and a facing
+    # direction, and redraws whenever any of them (or size/position) change.
     phase = NumericProperty(0.0)
     flash = NumericProperty(0.0)
+    face_x = NumericProperty(1.0)   # heading direction as a unit vector
+    face_y = NumericProperty(0.0)
+    moving = BooleanProperty(False)
 
     def __init__(self, anim_speed=1.0, **kwargs):
         super().__init__(**kwargs)
         self._anim_speed = anim_speed
-        self.bind(pos=self._redraw, size=self._redraw,
-                  phase=self._redraw, flash=self._redraw)
+        self.bind(pos=self._redraw, size=self._redraw, phase=self._redraw,
+                  flash=self._redraw, face_x=self._redraw, face_y=self._redraw,
+                  moving=self._redraw)
         self._redraw()
+
+    def _facing(self):
+        length = (self.face_x ** 2 + self.face_y ** 2) ** 0.5 or 1.0
+        return self.face_x / length, self.face_y / length
 
     def start(self):
         _register(self)
@@ -94,56 +111,77 @@ class Coin(CanvasSprite):
 
 
 class PlayerSprite(CanvasSprite):
-    # A round friendly creature. It bobs while moving and flashes when hurt.
+    # A friendly creature with shading, ears, walking feet and a face that turns
+    # to look where it is heading.
     dead = BooleanProperty(False)
     body_color = ListProperty([0.20, 0.62, 1.0])
 
     def draw(self):
         x, y = self.pos
         w, h = self.size
-        radius = min(w, h) * 0.40
-        bob = 0 if self.dead else math.sin(self.phase * 6.0) * h * 0.04
+        r = min(w, h) * 0.40
         cx = x + w / 2
+        bob = 0.0 if self.dead else math.sin(self.phase * 8.0) * r * 0.06 * (1.0 if self.moving else 0.4)
         cy = y + h / 2 + bob
+        fx, fy = self._facing()
+        px, py = -fy, fx  # perpendicular to facing
+        col = (0.55, 0.55, 0.58) if self.dead else tuple(self.body_color)
+        dark = (col[0] * 0.78, col[1] * 0.78, col[2] * 0.82)
+        light = (min(col[0] + 0.28, 1), min(col[1] + 0.28, 1), min(col[2] + 0.28, 1))
 
-        Color(0, 0, 0, 0.20)
-        Ellipse(pos=(cx - radius * 0.9, y + h * 0.04),
-                size=(radius * 1.8, radius * 0.5))
+        # shadow on the ground
+        Color(0, 0, 0, 0.22)
+        Ellipse(pos=(cx - r * 0.9, y + h * 0.03), size=(r * 1.8, r * 0.42))
 
-        if self.dead:
-            Color(0.55, 0.55, 0.58, 1)
-        else:
-            Color(self.body_color[0], self.body_color[1], self.body_color[2], 1)
-        Ellipse(pos=(cx - radius, cy - radius), size=(radius * 2, radius * 2))
+        # feet that step while moving
+        if not self.dead:
+            swing = math.sin(self.phase * 11.0) * r * 0.28 * (1.0 if self.moving else 0.0)
+            Color(0.12, 0.12, 0.16, 1)
+            Ellipse(pos=(cx - r * 0.55 + swing - r * 0.18, cy - r - r * 0.05), size=(r * 0.36, r * 0.26))
+            Ellipse(pos=(cx + r * 0.55 - swing - r * 0.18, cy - r - r * 0.05), size=(r * 0.36, r * 0.26))
 
-        # little feet
-        Color(0.12, 0.12, 0.15, 1)
-        foot = radius * 0.35
-        Ellipse(pos=(cx - radius * 0.6, cy - radius - foot * 0.4),
-                size=(foot, foot * 0.7))
-        Ellipse(pos=(cx + radius * 0.6 - foot, cy - radius - foot * 0.4),
-                size=(foot, foot * 0.7))
+        # ears
+        Color(*dark)
+        Triangle(points=[cx - r * 0.55, cy + r * 0.45, cx - r * 0.05, cy + r * 0.55, cx - r * 0.2, cy + r * 1.15])
+        Triangle(points=[cx + r * 0.55, cy + r * 0.45, cx + r * 0.05, cy + r * 0.55, cx + r * 0.2, cy + r * 1.15])
 
-        eye_r = radius * 0.28
-        eye_y = cy + radius * 0.15
-        for sign in (-1, 1):
-            ex = cx + sign * radius * 0.38
+        # body with simple shading
+        Color(*col)
+        Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+        Color(*dark)
+        Ellipse(pos=(cx - r * 0.85, cy - r), size=(r * 1.7, r * 0.85))
+        Color(*light)
+        Ellipse(pos=(cx - r * 0.5, cy - r * 0.7), size=(r * 1.0, r * 0.8))
+        Color(1, 1, 1, 0.35)
+        Ellipse(pos=(cx - r * 0.45, cy + r * 0.2), size=(r * 0.5, r * 0.38))
+
+        # a little nose pointing the way it faces
+        if not self.dead:
+            Color(1.0, 0.82, 0.4, 1)
+            _dir_triangle(cx + fx * r * 0.55, cy + fy * r * 0.15, fx, fy, r * 0.45, r * 0.2)
+
+        # eyes look toward the heading
+        eye_r = r * 0.30
+        base_x, base_y = cx + fx * r * 0.16, cy + r * 0.2 + fy * r * 0.1
+        for side in (-1, 1):
+            ex = base_x + px * r * 0.42 * side
+            ey = base_y + py * r * 0.42 * side
             Color(1, 1, 1, 1)
-            Ellipse(pos=(ex - eye_r, eye_y - eye_r), size=(eye_r * 2, eye_r * 2))
+            Ellipse(pos=(ex - eye_r, ey - eye_r), size=(eye_r * 2, eye_r * 2))
             if self.dead:
                 Color(0.1, 0.1, 0.1, 1)
-                Line(points=[ex - eye_r * 0.6, eye_y - eye_r * 0.6,
-                             ex + eye_r * 0.6, eye_y + eye_r * 0.6], width=1.5)
-                Line(points=[ex - eye_r * 0.6, eye_y + eye_r * 0.6,
-                             ex + eye_r * 0.6, eye_y - eye_r * 0.6], width=1.5)
+                Line(points=[ex - eye_r * 0.6, ey - eye_r * 0.6, ex + eye_r * 0.6, ey + eye_r * 0.6], width=1.6)
+                Line(points=[ex - eye_r * 0.6, ey + eye_r * 0.6, ex + eye_r * 0.6, ey - eye_r * 0.6], width=1.6)
             else:
-                Color(0.1, 0.1, 0.15, 1)
-                Ellipse(pos=(ex - eye_r * 0.5, eye_y - eye_r * 0.5),
-                        size=(eye_r, eye_r))
+                ppx, ppy = ex + fx * eye_r * 0.5, ey + fy * eye_r * 0.5
+                Color(0.08, 0.08, 0.12, 1)
+                Ellipse(pos=(ppx - eye_r * 0.55, ppy - eye_r * 0.55), size=(eye_r * 1.1, eye_r * 1.1))
+                Color(1, 1, 1, 0.9)
+                Ellipse(pos=(ppx - eye_r * 0.15, ppy + eye_r * 0.05), size=(eye_r * 0.32, eye_r * 0.32))
 
         if self.flash > 0:
             Color(1, 1, 1, self.flash * 0.7)
-            Ellipse(pos=(cx - radius, cy - radius), size=(radius * 2, radius * 2))
+            Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
 
 
 # Color and shape per monster type. Type number comes from the level data.
@@ -162,60 +200,73 @@ class MonsterSprite(CanvasSprite):
     def draw(self):
         x, y = self.pos
         w, h = self.size
-        radius = min(w, h) * 0.40
-        wobble = math.sin(self.phase * 5.0) * radius * 0.08
+        r = min(w, h) * 0.40
         cx = x + w / 2
-        cy = y + h / 2
+        wob = math.sin(self.phase * 6.0) * r * 0.06
+        cy = y + h / 2 + wob
         base = MONSTER_COLORS.get(int(self.mtype), MONSTER_COLORS[1])
+        dark = (base[0] * 0.6, base[1] * 0.6, base[2] * 0.6)
+        fx, fy = self._facing()
+        px, py = -fy, fx
+        mt = int(self.mtype)
 
-        Color(0, 0, 0, 0.20)
-        Ellipse(pos=(cx - radius * 0.9, y + h * 0.04),
-                size=(radius * 1.8, radius * 0.5))
+        # shadow
+        Color(0, 0, 0, 0.22)
+        Ellipse(pos=(cx - r * 0.9, y + h * 0.03), size=(r * 1.8, r * 0.42))
 
-        Color(base[0], base[1], base[2], 1)
-        if int(self.mtype) == 2:
-            # spiky body
-            spikes = 9
-            pts = []
-            for i in range(spikes * 2):
-                ang = math.pi * i / spikes
-                rr = radius * (1.0 if i % 2 == 0 else 0.65)
-                pts.extend([cx + math.cos(ang) * rr, cy + math.sin(ang) * rr + wobble])
-            Line(points=pts + pts[:2], width=2)
-            Ellipse(pos=(cx - radius * 0.7, cy - radius * 0.7 + wobble),
-                    size=(radius * 1.4, radius * 1.4))
+        # spikes (type 2) or horns (others) behind the head
+        Color(*dark)
+        if mt == 2:
+            for i in range(-2, 3):
+                sx = cx + i * r * 0.42
+                Triangle(points=[sx - r * 0.16, cy + r * 0.45, sx + r * 0.16, cy + r * 0.45, sx, cy + r * 1.2])
         else:
-            Ellipse(pos=(cx - radius, cy - radius + wobble),
-                    size=(radius * 2, radius * 2))
-            if int(self.mtype) == 3:
-                # tougher monster gets a darker armor band
-                Color(0, 0, 0, 0.25)
-                Rectangle(pos=(cx - radius, cy - radius * 0.2 + wobble),
-                          size=(radius * 2, radius * 0.4))
+            Triangle(points=[cx - r * 0.7, cy + r * 0.3, cx - r * 0.3, cy + r * 0.45, cx - r * 0.5, cy + r * 1.15])
+            Triangle(points=[cx + r * 0.7, cy + r * 0.3, cx + r * 0.3, cy + r * 0.45, cx + r * 0.5, cy + r * 1.15])
 
-        # angry eyes
-        eye_r = radius * 0.22
-        for sign in (-1, 1):
-            ex = cx + sign * radius * 0.35
-            ey = cy + radius * 0.2 + wobble
+        # body with shading
+        Color(base[0], base[1], base[2], 1)
+        Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+        Color(*dark)
+        Ellipse(pos=(cx - r * 0.85, cy - r), size=(r * 1.7, r * 0.8))
+        if mt == 3:
+            Color(0.22, 0.24, 0.30, 1)  # armor band on the tough one
+            Rectangle(pos=(cx - r, cy - r * 0.22), size=(r * 2, r * 0.44))
+
+        # eyes toward the heading, with angry brows
+        eye_r = r * 0.24
+        base_x, base_y = cx + fx * r * 0.14, cy + r * 0.18 + fy * r * 0.08
+        for side in (-1, 1):
+            ex = base_x + px * r * 0.40 * side
+            ey = base_y + py * r * 0.40 * side
             Color(1, 1, 1, 1)
             Ellipse(pos=(ex - eye_r, ey - eye_r), size=(eye_r * 2, eye_r * 2))
-            Color(0.1, 0.0, 0.0, 1)
-            Ellipse(pos=(ex - eye_r * 0.5, ey - eye_r * 0.5), size=(eye_r, eye_r))
+            ppx, ppy = ex + fx * eye_r * 0.5, ey + fy * eye_r * 0.5
+            Color(0.7, 0.0, 0.0, 1)
+            Ellipse(pos=(ppx - eye_r * 0.5, ppy - eye_r * 0.5), size=(eye_r, eye_r))
+            Color(0.08, 0.04, 0.04, 1)
+            Line(points=[ex - eye_r, ey + eye_r * 1.1, ex + eye_r * 0.7, ey + eye_r * 0.4], width=2)
 
-        # hp pips above the monster when it can take more than one hit
+        # fanged mouth at the front
+        mx, my = cx + fx * r * 0.1, cy - r * 0.4
+        Color(0.1, 0.0, 0.0, 1)
+        Ellipse(pos=(mx - r * 0.32, my - r * 0.13), size=(r * 0.64, r * 0.26))
+        Color(1, 1, 1, 1)
+        Triangle(points=[mx - r * 0.22, my + r * 0.1, mx - r * 0.06, my + r * 0.1, mx - r * 0.14, my - r * 0.08])
+        Triangle(points=[mx + r * 0.22, my + r * 0.1, mx + r * 0.06, my + r * 0.1, mx + r * 0.14, my - r * 0.08])
+
+        # hp pips when it takes more than one hit
         if self.max_hp > 1:
-            pip = radius * 0.16
+            pip = r * 0.16
             total = self.max_hp * pip * 2.2
             start = cx - total / 2
             for i in range(int(self.max_hp)):
                 Color(0.95, 0.85, 0.2, 1) if i < self.hp else Color(0.3, 0.3, 0.3, 1)
-                Ellipse(pos=(start + i * pip * 2.2, cy + radius * 1.05),
-                        size=(pip * 1.6, pip * 1.6))
+                Ellipse(pos=(start + i * pip * 2.2, cy + r * 1.25), size=(pip * 1.6, pip * 1.6))
 
         if self.flash > 0:
-            Color(1, 1, 1, self.flash * 0.8)
-            Ellipse(pos=(cx - radius, cy - radius), size=(radius * 2, radius * 2))
+            Color(1, 1, 1, self.flash * 0.85)
+            Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
 
 
 class Hazard(CanvasSprite):

@@ -89,6 +89,7 @@ class AudioManager:
             return
         sound = self._sound_for(key)
         if sound is not None:
+            sound.stop()  # drop any stale channel before starting a fresh one
             sound.volume = self._volume()
             sound.play()
 

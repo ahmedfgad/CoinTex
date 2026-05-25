@@ -66,6 +66,24 @@ WORLD_INTROS = {
         "Everything at once: fast chasers, pulsing fire,\nand hard hits. Good luck!"),
 }
 
+# Shown once, on the first level the player enters, so they know how the gun works.
+GUN_INTRO = ("Your Gun",
+             "Tap the gun button (bottom right) to shoot.\n"
+             "It automatically hits the NEAREST monster,\nso you never need to aim.\n"
+             "You have a few shots in each level.")
+
+# Shown once, before the first level that contains a freeze clock.
+FREEZER_INTRO = ("Freeze Clock",
+                 "Sometimes a blue freeze clock appears in a level.\n"
+                 "Grab it to freeze every monster for a few seconds,\n"
+                 "a safe moment to collect coins or slip past.\nIt is rare, so use it well.")
+
+# Shown once, before the first level where a monster takes more than one hit.
+HP_INTRO = ("Tougher Monsters",
+            "Monsters now take more than one hit to defeat.\n"
+            "The dots above a monster show how many hits it needs.\n"
+            "Keep firing at it, or just dodge it.")
+
 
 def place(sprite):
     # Set a sprite's pos_hint from its center (cx, cy) and its size_hint.
@@ -163,13 +181,6 @@ class GameScreen(Screen):
                                                  pos_hint={"center_x": 0.5, "top": 0.90})
         self.freeze_timer.opacity = 0
         self.hud.add_widget(self.freeze_timer)
-
-        # gun reload countdown (orange), shown just above the gun while it refills
-        self.reload_dial = graphics.FreezeTimer(wedge=(1.0, 0.6, 0.2), dark=(0.35, 0.15, 0.05),
-                                                size_hint=(0.08, 0.11),
-                                                pos_hint={"right": 0.93, "y": 0.18})
-        self.reload_dial.opacity = 0
-        self.hud.add_widget(self.reload_dial)
 
         # Auto play toggle (bottom-left). Tapping it lets the built-in genetic
         # algorithm take over, and tapping again returns to manual control.
@@ -498,11 +509,11 @@ class GameScreen(Screen):
         else:
             self.freeze_timer.opacity = 0
         if self.reload_time > 0:
-            self.reload_dial.opacity = 1
-            self.reload_dial.seconds = self.reload_time
-            self.reload_dial.fraction = self.reload_time / RELOAD_SECONDS
+            self.fire_btn.reloading = True
+            self.fire_btn.reload_seconds = self.reload_time
+            self.fire_btn.reload_fraction = self.reload_time / RELOAD_SECONDS
         else:
-            self.reload_dial.opacity = 0
+            self.fire_btn.reloading = False
 
     def _move_toward(self, sprite, tx, ty, step):
         dx = tx - sprite.cx
@@ -609,16 +620,13 @@ class GameScreen(Screen):
                 monster.parent.remove_widget(monster)
             if monster in self.monsters:
                 self.monsters.remove(monster)
-            # It returns away from the player (not at the death spot), so shooting
-            # a chaser actually buys space. A countdown marker shows where it will
-            # come back.
-            rx, ry = self._spawn_point_away()
+            # It returns at the spot where it died; a countdown marker shows where.
             marker = graphics.RespawnMarker(size_hint=RESPAWN_MARKER_SIZE)
-            marker.cx, marker.cy = rx, ry
+            marker.cx, marker.cy = monster.cx, monster.cy
             place(marker)
             self.world.add_widget(marker)
-            self.pending_respawns.append({"t": RESPAWN_DELAY, "x": rx,
-                                          "y": ry, "marker": marker})
+            self.pending_respawns.append({"t": RESPAWN_DELAY, "x": monster.cx,
+                                          "y": monster.cy, "marker": marker})
             app.audio.play_sfx("monster_death")
         else:
             app.audio.play_sfx("hit")
@@ -801,6 +809,8 @@ class CointexApp(kivy.app.App):
         self.sm.add_widget(ui.SettingsScreen(name="settings"))
         self.sm.add_widget(ui.AboutScreen(name="about"))
         self.sm.add_widget(ui.TutorialScreen(name="tutorial"))
+        self.sm.add_widget(ui.GuideScreen(name="guide"))
+        self.sm.add_widget(ui.AutoPlayerScreen(name="autoplayer"))
         self.game = GameScreen(name="game")
         self.sm.add_widget(self.game)
         return self.sm
@@ -813,19 +823,35 @@ class CointexApp(kivy.app.App):
         self.go("levelselect")
 
     def start_level(self, index):
-        # Before the first level of a world that brings a new mechanic, show a
-        # one-time heads-up message so the player knows what to expect.
+        # Show any one-time heads-up messages that are due (a world's new mechanic,
+        # or the freeze clock the first time it can appear), then enter the level.
         level = levels.get_level(index)
         world = level["world"]
         first_of_world = (world - 1) * levels.LEVELS_PER_WORLD + 1
-        intro = WORLD_INTROS.get(world)
+        queue = []
+        if level["monsters"] > 0 and not self.state.get_setting("gun_hint_seen"):
+            self.state.set_setting("gun_hint_seen", True)
+            queue.append(GUN_INTRO)
         flag = "intro_seen_w{}".format(world)
-        if index == first_of_world and intro and not self.state.get_setting(flag):
+        if index == first_of_world and world in WORLD_INTROS and not self.state.get_setting(flag):
             self.state.set_setting(flag, True)
-            title, body = intro
-            ui.InfoDialog(title, body, on_ok=lambda: self._enter_level(index)).open()
-        else:
+            queue.append(WORLD_INTROS[world])
+        if level["monster_hp"] > 1 and not self.state.get_setting("hp_hint_seen"):
+            self.state.set_setting("hp_hint_seen", True)
+            queue.append(HP_INTRO)
+        if level["freezers"] > 0 and not self.state.get_setting("freezer_hint_seen"):
+            self.state.set_setting("freezer_hint_seen", True)
+            queue.append(FREEZER_INTRO)
+        self._show_intros_then_enter(queue, index)
+
+    def _show_intros_then_enter(self, queue, index):
+        # Show the queued messages one after another, then start the level.
+        if not queue:
             self._enter_level(index)
+            return
+        title, body = queue[0]
+        ui.InfoDialog(title, body,
+                      on_ok=lambda: self._show_intros_then_enter(queue[1:], index)).open()
 
     def _enter_level(self, index):
         self.current_level_index = index

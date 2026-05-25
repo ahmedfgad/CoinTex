@@ -41,6 +41,23 @@ NEAR_PLAYER_WEIGHT = 3.0
 LOOKAHEAD = 0.12
 CHASE_MARGIN = 0.05
 
+# Player-adjustable auto-play tuning, set from the Auto Player settings screen via
+# apply_auto_settings(). Defaults match "balanced" + "normal".
+STYLE_COIN_MULT = 1.0   # higher = greedier for coins
+STYLE_SAFE_MULT = 1.0   # higher = more cautious (bigger safety penalty + flee)
+
+
+def apply_auto_settings(style, speed):
+    # Translate the player's choices into the numbers the agent uses.
+    global STYLE_COIN_MULT, STYLE_SAFE_MULT, RETARGET_DELAY
+    if style == "cautious":
+        STYLE_COIN_MULT, STYLE_SAFE_MULT = 0.6, 1.7
+    elif style == "aggressive":
+        STYLE_COIN_MULT, STYLE_SAFE_MULT = 2.2, 0.6
+    else:  # balanced
+        STYLE_COIN_MULT, STYLE_SAFE_MULT = 1.0, 1.0
+    RETARGET_DELAY = {"slow": 0.25, "normal": 0.15, "fast": 0.08}.get(speed, 0.15)
+
 # Size of the genetic algorithm. The problem has only two values to find, so a
 # small population is plenty and stays fast even on a phone.
 POPULATION = 200
@@ -143,8 +160,8 @@ def fitness(snapshot, target_x, target_y):
     time_limit = snapshot.get("time_limit")
     if time_left is not None and time_limit:
         urgency = min(1.0, max(0.0, 1.0 - time_left / (0.6 * time_limit)))
-    coin_weight = COIN_WEIGHT * (1.0 + 2.5 * urgency)
-    hit_penalty = SAFE_HIT_PENALTY * (1.0 - 0.4 * urgency)
+    coin_weight = COIN_WEIGHT * STYLE_COIN_MULT * (1.0 + 2.5 * urgency)
+    hit_penalty = SAFE_HIT_PENALTY * STYLE_SAFE_MULT * (1.0 - 0.4 * urgency)
 
     # When a monster is chasing and the gun is empty, the agent cannot shoot back,
     # so it must commit to escaping: give chasers extra berth and flee harder.
@@ -196,7 +213,7 @@ def fitness(snapshot, target_x, target_y):
     if flee_from is not None:
         flee_x, flee_y = flee_from
         away = ((target_x - flee_x) ** 2 + (target_y - flee_y) ** 2) ** 0.5
-        flee_weight = FLEE_WEIGHT * (2.5 if chaser_near else 1.0)
+        flee_weight = FLEE_WEIGHT * STYLE_SAFE_MULT * (2.5 if chaser_near else 1.0)
         score += away * flee_weight
 
     # Mild preference for shorter moves so it grabs near coins first.
@@ -235,6 +252,12 @@ class AutoPlayer:
         self._thread = None
 
     def _run(self):
+        # Pick up the player's auto-play settings (style and reaction speed).
+        from kivy.app import App
+        running = App.get_running_app()
+        if running is not None and getattr(running, "state", None) is not None:
+            apply_auto_settings(running.state.get_setting("ga_style"),
+                                running.state.get_setting("ga_speed"))
         # Start from a population of random target points spread over the screen.
         population = [(random.random(), random.random()) for _ in range(POPULATION)]
 

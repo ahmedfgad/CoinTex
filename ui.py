@@ -16,7 +16,7 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.slider import Slider
 from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
-from kivy.graphics import Color, RoundedRectangle, Rectangle
+from kivy.graphics import Color, RoundedRectangle, Rectangle, Ellipse
 from kivy.metrics import sp, dp
 from kivy.clock import Clock
 from kivy.properties import ListProperty, NumericProperty, BooleanProperty
@@ -42,7 +42,8 @@ ABOUT_TEXT = (
     "monsters and fire. Tap it again to take back control.\n"
     "\n"
     "Created by Ahmed Fawzy Gad.\n"
-    "Email: ahmed.f.gad@gmail.com"
+    "Email: ahmed.f.gad@gmail.com\n"
+    "Source code: https://github.com/ahmedfgad/CoinTex"
 )
 
 
@@ -163,12 +164,15 @@ class MenuScreen(StyledScreen):
                              color=[1, 0.85, 0.2, 1], size_hint_y=0.4))
         play = StyledButton(text="Play", bg=[0.2, 0.7, 0.4, 1])
         how = StyledButton(text="How to play", bg=[0.9, 0.6, 0.2, 1])
+        guide = StyledButton(text="Guide", bg=[0.85, 0.5, 0.25, 1])
         settings = StyledButton(text="Settings", bg=[0.25, 0.5, 0.9, 1])
         play.bind(on_release=lambda *a: app().go("worldmap"))
         how.bind(on_release=lambda *a: app().go("tutorial"))
+        guide.bind(on_release=lambda *a: app().go("guide"))
         settings.bind(on_release=lambda *a: app().go("settings"))
         box.add_widget(play)
         box.add_widget(how)
+        box.add_widget(guide)
         box.add_widget(settings)
         self.stars = Label(text="", font_size=sp(18), color=[1, 1, 1, 0.85], size_hint_y=0.2)
         box.add_widget(self.stars)
@@ -269,6 +273,10 @@ class SettingsScreen(StyledScreen):
         vol_row.add_widget(self.volume)
         box.add_widget(vol_row)
 
+        auto = StyledButton(text="Auto Player", bg=[0.3, 0.6, 0.55, 1], size_hint_y=0.12)
+        auto.bind(on_release=lambda *a: app().go("autoplayer"))
+        box.add_widget(auto)
+
         about = StyledButton(text="About", bg=[0.25, 0.5, 0.9, 1], size_hint_y=0.12)
         about.bind(on_release=lambda *a: app().go("about"))
         box.add_widget(about)
@@ -342,13 +350,20 @@ class AboutScreen(StyledScreen):
 
 class GunButton(ButtonBehavior, Widget):
     # The fire control, drawn as a blaster. Remaining ammo shows as bullet pips,
-    # and it greys out while on cooldown or out of ammo.
+    # and it greys out while on cooldown or out of ammo. While the gun is
+    # reloading, a countdown ring and a number are drawn on the button itself.
     ammo = NumericProperty(0)
     ready = BooleanProperty(True)
+    reloading = BooleanProperty(False)
+    reload_fraction = NumericProperty(0.0)
+    reload_seconds = NumericProperty(0.0)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.bind(pos=self._redraw, size=self._redraw, ammo=self._redraw, ready=self._redraw)
+        self._reload_label = Label(text="", bold=True, color=(1, 1, 1, 1))
+        self.add_widget(self._reload_label)
+        self.bind(pos=self._redraw, size=self._redraw, ammo=self._redraw, ready=self._redraw,
+                  reloading=self._redraw, reload_fraction=self._redraw, reload_seconds=self._redraw)
         self._redraw()
 
     def on_press(self):
@@ -359,7 +374,7 @@ class GunButton(ButtonBehavior, Widget):
     def _redraw(self, *args):
         x, y = self.pos
         w, h = self.size
-        enabled = self.ready and self.ammo > 0
+        enabled = self.ready and self.ammo > 0 and not self.reloading
         self.canvas.before.clear()
         with self.canvas.before:
             if enabled:
@@ -381,6 +396,27 @@ class GunButton(ButtonBehavior, Widget):
             for i in range(count):
                 Color(1, 0.9, 0.3, 1)
                 Rectangle(pos=(start + i * (pip_w + gap), y + h * 0.12), size=(pip_w, h * 0.10))
+            if self.reloading:
+                # countdown ring + seconds drawn over the gun, so it clearly
+                # belongs to the gun (not a separate respawn-looking marker).
+                cx, cy = x + w / 2, y + h / 2
+                r = min(w, h) * 0.34
+                Color(0.0, 0.0, 0.0, 0.45)
+                RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(14)])
+                Color(0.30, 0.15, 0.05, 0.95)
+                Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+                Color(1.0, 0.6, 0.2, 1)
+                Ellipse(pos=(cx - r * 0.92, cy - r * 0.92), size=(r * 1.84, r * 1.84),
+                        angle_start=0, angle_end=360 * max(0.0, min(1.0, self.reload_fraction)))
+                Color(0.30, 0.15, 0.05, 1)
+                Ellipse(pos=(cx - r * 0.55, cy - r * 0.55), size=(r * 1.1, r * 1.1))
+        if self.reloading:
+            self._reload_label.center = (x + w / 2, y + h / 2)
+            self._reload_label.font_size = min(w, h) * 0.30
+            self._reload_label.text = (str(int(math.ceil(self.reload_seconds)))
+                                       if self.reload_seconds > 0 else "")
+        else:
+            self._reload_label.text = ""
 
 
 class LevelButton(StyledButton):
@@ -521,7 +557,8 @@ class TutorialScreen(StyledScreen):
             self._spawn_hazard()
             self.health_holder.opacity = 1
         elif n == 3:
-            self.coach.text = "Tap the gun button (bottom right) to shoot the nearest monster."
+            self.coach.text = ("Tap the gun button (bottom right) to shoot. It automatically\n"
+                               "hits the nearest monster, so you never need to aim.")
             self.gun_btn.ammo = 1
             self.gun_btn.ready = True
             self.gun_btn.opacity = 1
@@ -684,3 +721,147 @@ class TutorialScreen(StyledScreen):
         self._hp_bar.pos = self.health_holder.pos
         self._hp_bar.size = (self.health_holder.width * frac, self.health_holder.height)
         self._hp_color.rgba = [1 - frac, 0.3 + 0.5 * frac, 0.2, 1]
+
+
+# Each row of the guide: a real game icon next to a short, plain explanation.
+GUIDE_ROWS = [
+    ("player", "Tap anywhere on the screen and your character walks there."),
+    ("coin", "Collect every coin to finish a level, before the timer at the top runs out."),
+    ("monster", "Monsters drain your health on contact. The dots above a monster show how many "
+                "hits it takes to defeat. From world 4 they chase you and turn bright red. "
+                "Outrun them or shoot them."),
+    ("fire", "Fire sweeps across the screen. From world 3 it grows and shrinks as it moves."),
+    ("freezer", "Grab the blue freeze clock to freeze every monster for a few seconds. It is rare."),
+    ("gun", "Tap the gun to shoot. It automatically hits the nearest monster, so no aiming is "
+            "needed. You get a few shots; from world 4 the gun reloads on its own and an orange "
+            "dial shows the wait."),
+]
+
+GUIDE_TIPS = [
+    "Your health bar is at the top left. Keep it up and avoid contact.",
+    "Finish a level with more health left to earn up to 3 stars.",
+    "Tap the Auto button during a level to let the computer play, and tap again to take over.",
+]
+
+
+class GuideScreen(StyledScreen):
+    # A readable reference of every part of the game, using the same icons the
+    # game draws so it is easy to recognise.
+    theme_world = 3
+
+    def build(self):
+        outer = BoxLayout(orientation="vertical", padding=dp(20), spacing=dp(10))
+        outer.add_widget(Label(text="Game Guide", font_size=sp(32), bold=True,
+                               size_hint_y=0.1, color=[1, 1, 1, 1]))
+
+        scroll = ScrollView(size_hint_y=0.76)
+        col = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(12), padding=(0, dp(4)))
+        col.bind(minimum_height=col.setter("height"))
+
+        for kind, text in GUIDE_ROWS:
+            row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(84), spacing=dp(14))
+            row.add_widget(self._make_icon(kind))
+            label = Label(text=text, font_size=sp(18), color=[1, 1, 1, 1],
+                          halign="left", valign="middle")
+            label.bind(size=lambda lb, *a: setattr(lb, "text_size", lb.size))
+            row.add_widget(label)
+            col.add_widget(row)
+
+        for tip in GUIDE_TIPS:
+            t = Label(text="- " + tip, font_size=sp(18), color=[1, 1, 1, 1],
+                      halign="left", valign="top", size_hint_y=None)
+            t.bind(width=lambda lb, *a: setattr(lb, "text_size", (lb.width, None)))
+            t.bind(texture_size=lambda lb, *a: setattr(lb, "height", lb.texture_size[1] + dp(8)))
+            col.add_widget(t)
+
+        scroll.add_widget(col)
+        outer.add_widget(scroll)
+
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.12)
+        back.bind(on_release=lambda *a: app().go("menu"))
+        outer.add_widget(back)
+        self.root_layout.add_widget(outer)
+
+    def _make_icon(self, kind):
+        # Build a small, fixed-width instance of the real game sprite. Drawn once
+        # (not animated) so it stays a light static icon.
+        if kind == "player":
+            icon = graphics.PlayerSprite(size_hint=(None, 1), width=dp(60))
+        elif kind == "coin":
+            icon = graphics.Coin(size_hint=(None, 1), width=dp(60))
+        elif kind == "monster":
+            icon = graphics.MonsterSprite(size_hint=(None, 1), width=dp(60))
+            icon.mtype, icon.max_hp, icon.hp = 1, 1, 1
+        elif kind == "fire":
+            icon = graphics.Hazard(size_hint=(None, 1), width=dp(60))
+        elif kind == "freezer":
+            icon = graphics.Freezer(size_hint=(None, 1), width=dp(60))
+        else:  # gun
+            icon = GunButton(size_hint=(None, 1), width=dp(76))
+            icon.ammo, icon.ready = 2, True
+        return icon
+
+
+class AutoPlayerScreen(StyledScreen):
+    # Lets the player tune how the built-in genetic-algorithm agent plays when the
+    # Auto button is on: its play style and how often it re-decides.
+    theme_world = 6
+
+    STYLES = [("cautious", "Cautious"), ("balanced", "Balanced"), ("aggressive", "Aggressive")]
+    SPEEDS = [("slow", "Slow"), ("normal", "Normal"), ("fast", "Fast")]
+
+    def build(self):
+        box = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(12),
+                        size_hint=(0.88, 0.92), pos_hint={"center_x": 0.5, "center_y": 0.5})
+        box.add_widget(Label(text="Auto Player", font_size=sp(32), bold=True,
+                             size_hint_y=0.12, color=[1, 1, 1, 1]))
+        intro = Label(text="The Auto button lets a genetic-algorithm agent play for you.\n"
+                           "Choose how it plays:",
+                      font_size=sp(16), size_hint_y=0.14, color=[1, 1, 1, 0.9],
+                      halign="center", valign="middle")
+        intro.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
+        box.add_widget(intro)
+
+        box.add_widget(Label(text="Play style  (safety vs collecting coins)", font_size=sp(18),
+                             bold=True, size_hint_y=0.08, color=[1, 1, 1, 1]))
+        self.style_btns = {}
+        style_row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=0.14)
+        for key, label in self.STYLES:
+            b = StyledButton(text=label, font_size=sp(18))
+            b.bind(on_release=lambda w, k=key: self._set("ga_style", k))
+            self.style_btns[key] = b
+            style_row.add_widget(b)
+        box.add_widget(style_row)
+
+        box.add_widget(Label(text="Reaction speed  (how often it re-decides)", font_size=sp(18),
+                             bold=True, size_hint_y=0.08, color=[1, 1, 1, 1]))
+        self.speed_btns = {}
+        speed_row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=0.14)
+        for key, label in self.SPEEDS:
+            b = StyledButton(text=label, font_size=sp(18))
+            b.bind(on_release=lambda w, k=key: self._set("ga_speed", k))
+            self.speed_btns[key] = b
+            speed_row.add_widget(b)
+        box.add_widget(speed_row)
+
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.12)
+        back.bind(on_release=lambda *a: app().go("settings"))
+        box.add_widget(back)
+        self.root_layout.add_widget(box)
+
+    def on_enter(self):
+        app().audio.play_menu_music()
+        self._refresh()
+
+    def _set(self, key, value):
+        app().state.set_setting(key, value)
+        self._refresh()
+
+    def _refresh(self):
+        state = app().state
+        style = state.get_setting("ga_style")
+        speed = state.get_setting("ga_speed")
+        for key, btn in self.style_btns.items():
+            btn.bg = [0.2, 0.7, 0.4, 1] if key == style else [0.35, 0.4, 0.5, 1]
+        for key, btn in self.speed_btns.items():
+            btn.bg = [0.2, 0.7, 0.4, 1] if key == speed else [0.35, 0.4, 0.5, 1]

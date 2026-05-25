@@ -14,7 +14,12 @@ DEFAULT_SETTINGS = {
     "music_on": True,
     "sfx_on": True,
     "volume": 1.0,   # 0.0 to 1.0
+    "ga_style": "balanced",   # auto player: cautious | balanced | aggressive
+    "ga_speed": "normal",     # auto player: slow | normal | fast
     "tutorial_seen": False,
+    "gun_hint_seen": False,
+    "freezer_hint_seen": False,
+    "hp_hint_seen": False,
     "intro_seen_w2": False,
     "intro_seen_w3": False,
     "intro_seen_w4": False,

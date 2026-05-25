@@ -268,14 +268,14 @@ class MonsterSprite(CanvasSprite):
         Triangle(points=[mx - r * 0.22, my + r * 0.1, mx - r * 0.06, my + r * 0.1, mx - r * 0.14, my - r * 0.08])
         Triangle(points=[mx + r * 0.22, my + r * 0.1, mx + r * 0.06, my + r * 0.1, mx + r * 0.14, my - r * 0.08])
 
-        # hp pips when it takes more than one hit
-        if self.max_hp > 1:
-            pip = r * 0.16
-            total = self.max_hp * pip * 2.2
-            start = cx - total / 2
-            for i in range(int(self.max_hp)):
-                Color(0.95, 0.85, 0.2, 1) if i < self.hp else Color(0.3, 0.3, 0.3, 1)
-                Ellipse(pos=(start + i * pip * 2.2, cy + r * 1.25), size=(pip * 1.6, pip * 1.6))
+        # hp dots above the head: one per hit needed, gold = remaining. Shown for
+        # every monster (even one-hit ones) so the meaning is consistent.
+        pip = r * 0.16
+        total = self.max_hp * pip * 2.2
+        start = cx - total / 2
+        for i in range(int(self.max_hp)):
+            Color(0.95, 0.85, 0.2, 1) if i < self.hp else Color(0.3, 0.3, 0.3, 1)
+            Ellipse(pos=(start + i * pip * 2.2, cy + r * 1.25), size=(pip * 1.6, pip * 1.6))
 
         if self.frozen:
             # icy tint to show the monster is paused

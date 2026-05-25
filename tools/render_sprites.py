@@ -17,7 +17,11 @@ from kivy.uix.label import Label
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
 
+# Make the project root importable no matter where this is run from.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import graphics
+import ui
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "sprite_preview")
@@ -74,9 +78,46 @@ class Sheet(App):
         hazard = graphics.Hazard()
         hazard.phase = 0.5
         add_cell(hazard, "Fire hazard", "fire.png")
+        big_fire = graphics.Hazard()
+        big_fire.phase = 0.5
+        big_fire.size_factor = 1.5
+        add_cell(big_fire, "Fire (pulsed big)", "fire_pulsing.png")
         add_cell(graphics.Projectile(), "Projectile", "projectile.png")
-        grid.add_widget(Label(text=""))
-        grid.add_widget(Label(text=""))
+
+        freezer = graphics.Freezer()
+        freezer.phase = 0.6
+        add_cell(freezer, "Freeze clock", "freeze_clock.png")
+
+        chaser = graphics.MonsterSprite()
+        chaser.mtype = 2; chaser.max_hp = 2; chaser.hp = 2
+        chaser.chasing = True; chaser.phase = 0.6
+        add_cell(chaser, "Monster chasing", "monster_chasing.png")
+
+        frozen = graphics.MonsterSprite()
+        frozen.mtype = 2; frozen.max_hp = 2; frozen.hp = 2
+        frozen.frozen = True; frozen.phase = 0.6
+        add_cell(frozen, "Monster frozen", "monster_frozen.png")
+
+        gun = ui.GunButton()
+        gun.ammo = 3; gun.ready = True
+        add_cell(gun, "Gun (ready)", "gun.png")
+
+        gun_r = ui.GunButton()
+        gun_r.ammo = 0; gun_r.reloading = True
+        gun_r.reload_fraction = 0.65; gun_r.reload_seconds = 4
+        add_cell(gun_r, "Gun (reloading)", "gun_reloading.png")
+
+        ft = graphics.FreezeTimer()
+        ft.fraction = 0.65; ft.seconds = 4
+        add_cell(ft, "Freeze timer", "freeze_timer.png")
+
+        rm = graphics.RespawnMarker()
+        rm.fraction = 0.65; rm.seconds = 3
+        add_cell(rm, "Respawn marker", "respawn_marker.png")
+
+        # pad the last row so the sheet stays a clean grid
+        while len(grid.children) % 5 != 0:
+            grid.add_widget(Label(text=""))
 
         self.grid = grid
         Clock.schedule_once(self._shoot, 0.7)

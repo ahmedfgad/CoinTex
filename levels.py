@@ -6,16 +6,22 @@
 #
 # Difficulty curve
 # ----------------
-# All the knobs below change in one direction as g goes up, so a level is never
-# easier than the one before it:
-#   coins          : 5  ->  30   (more coins to collect, longer time on screen)
-#   monster count  : 1  ->   7
-#   monster hp     : 1  ->   3   (worlds 1-2 = 1 hit, 3-4 = 2 hits, 5-6 = 3 hits)
-#   monster speed  : slow -> fast (move duration 2.0s -> ~0.8s, lower is faster)
-#   fire count     : 1  ->  12
-#   fire speed     : slow -> fast (sweep duration 6.0s -> 2.0s)
-#   time limit     : none for worlds 1-2, then a shrinking limit
-#   player health  : stays at 100; the pressure comes from the knobs above
+# Levels get harder with DEPTH, not with more things on screen. The enemy counts
+# are kept low and nearly flat so the game stays smooth on every device; the
+# challenge comes from how the few enemies behave. All the knobs change in one
+# direction as g goes up, so a level is never easier than the one before it:
+#   coins           : 5  ->  30   (the only count that still grows; the goal size)
+#   monster count   : 1  ->   2   (capped low on purpose)
+#   monster hp      : 1  ->   3
+#   fire count      : 1  ->   2   (capped low on purpose)
+#   monster speed   : slow -> fast (move duration 2.0s -> ~0.8s, lower is faster)
+#   fire speed      : slow -> fast (sweep duration 6.0s -> 2.0s)
+#   enemy speed mult: 1.0 -> 1.6  (extra speed on top, capped so chasers stay escapable)
+#   chase range/time: 0 -> monsters lock onto and chase the player when near
+#   fire pulse      : 0 -> fires grow and shrink, so the danger zone breathes
+#   contact damage  : 45 -> 120 dps (less forgiving with depth)
+#   player health   : 60 -> 30
+#   time limit      : every level is timed; generous early, tight late
 # To retune, edit the formulas in build_levels. To make a single level easier or
 # harder, edit its dict in the LEVELS list after it is built.
 
@@ -45,17 +51,29 @@ def build_levels():
         world = (g - 1) // LEVELS_PER_WORLD + 1
         world_index = (g - 1) % LEVELS_PER_WORLD + 1
 
+        # Entity counts: capped LOW and nearly flat. Keeping the number of sprites
+        # small at every level is what keeps the game smooth. Coins are the one
+        # count that still grows, since they are the goal.
         coins = _clamp(5 + (g - 1) // 2, 5, 30)
-        monster_count = _clamp(1 + (g - 1) // 9, 1, 7)
+        monster_count = _clamp(1 + (g - 1) // 12, 1, 2)
         monster_hp = _clamp(1 + (g - 1) // 20, 1, 3)
-        monster_speed = round(_clamp(2.0 - (g - 1) * 0.02, 0.8, 2.0), 2)
-        fire_count = _clamp(1 + (g - 1) // 5, 1, 12)
-        fire_speed = round(_clamp(6.0 - (g - 1) * 0.07, 2.0, 6.0), 2)
+        fire_count = _clamp(1 + (g - 1) // 16, 1, 2)
 
-        if g <= 20:
-            time_limit = None
-        else:
-            time_limit = _clamp(150 - (g - 20) * 2, 50, 150)
+        # Behavior knobs that scale with depth without adding any sprites.
+        monster_speed = round(_clamp(2.0 - (g - 1) * 0.02, 0.8, 2.0), 2)
+        fire_speed = round(_clamp(6.0 - (g - 1) * 0.07, 2.0, 6.0), 2)
+        enemy_speed_mult = round(_clamp(1.0 + (g - 1) * 0.010, 1.0, 1.4), 3)
+        chase_range = round(_clamp((g - 1) * 0.005, 0.0, 0.22), 3)
+        chase_time = round(_clamp((g - 1) * 0.02, 0.0, 1.0), 2)
+        pulse_amp = round(_clamp((g - 1) * 0.009, 0.0, 0.45), 3)
+        pulse_period = round(_clamp(2.0 - (g - 1) * 0.02, 1.0, 2.0), 2)
+        # Contact damage rises only gently. The pressure is meant to come from the
+        # reactable mechanics (chase, fire pulse, time), not from one touch killing.
+        contact_damage = round(_clamp(50.0 + (g - 1) * 0.4, 50.0, 70.0), 1)
+
+        # Every level is timed. The limit only ever shrinks with depth (it is a
+        # function of g alone), so the time pressure never eases on a later level.
+        time_limit = int(_clamp(150 - (g - 1) * 1.6, 60, 150))
 
         levels.append({
             "index": g,
@@ -68,6 +86,12 @@ def build_levels():
             "monster_speed": monster_speed,
             "fires": fire_count,
             "fire_speed": fire_speed,
+            "enemy_speed_mult": enemy_speed_mult,
+            "chase_range": chase_range,
+            "chase_time": chase_time,
+            "pulse_amp": pulse_amp,
+            "pulse_period": pulse_period,
+            "contact_damage": contact_damage,
             "time_limit": time_limit,
             # Health shrinks from 60 down to 30 across the game, so touching a
             # monster or fire matters much more in later levels.
@@ -101,14 +125,20 @@ def get_world(world):
 
 def difficulty_score(level):
     # A rough single number for how hard a level is. Used to check the curve
-    # only increases. Bigger means harder.
-    time_pressure = 0 if level["time_limit"] is None else (160 - level["time_limit"]) * 0.3
+    # only increases. Bigger means harder. Every term is monotonic in g, so the
+    # total is monotonic by construction (verified by tools/check_difficulty.py).
+    time_pressure = (160 - level["time_limit"]) * 0.3
     return (
         level["coins"] * 0.5
         + level["monsters"] * level["monster_hp"] * 3.0
         + (2.2 - level["monster_speed"]) * 8.0
+        + (level["enemy_speed_mult"] - 1.0) * 25.0
         + level["fires"] * 2.0
         + (6.5 - level["fire_speed"]) * 2.0
+        + level["chase_range"] * 60.0
+        + level["chase_time"] * 8.0
+        + level["pulse_amp"] * 20.0
         + (60 - level["player_health"]) * 0.3
+        + (level["contact_damage"] - 45.0) * 0.2
         + time_pressure
     )

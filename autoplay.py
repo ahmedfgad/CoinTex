@@ -35,6 +35,11 @@ SAFE_HIT_PENALTY = 350.0
 FLEE_RADIUS = 0.18
 FLEE_WEIGHT = 40.0
 NEAR_PLAYER_WEIGHT = 3.0
+# How far ahead to project a chasing monster along its heading, and the extra
+# clearance to keep from a chaser. These let the agent dodge where a chaser is
+# going, not only where it is.
+LOOKAHEAD = 0.12
+CHASE_MARGIN = 0.05
 
 # Size of the genetic algorithm. The problem has only two values to find, so a
 # small population is plenty and stays fast even on a phone.
@@ -72,15 +77,31 @@ def sense(game):
     px, py = player.cx, player.cy
     coins = [(c.cx, c.cy) for c in list(game.coins)]
 
-    # Things to stay away from. Frozen monsters cannot hurt the player, so they
-    # are left out while a freeze is active. Fire is never frozen.
-    danger = [(h.cx, h.cy) for h in list(game.hazards)]
-    if game.freeze_time <= 0:
-        danger += [(m.cx, m.cy) for m in list(game.monsters)]
+    # Convert a sprite's pixel radius back to the 0..1 space the rest of the math
+    # uses, so the agent respects each danger's real (possibly pulsing) size.
+    world_w = getattr(getattr(game, "world", None), "width", 0) or 0
+    inv_w = (1.0 / world_w) if world_w else 0.0
 
-    monsters = [(m.cx, m.cy) for m in list(game.monsters)]
-    if monsters:
-        nearest_monster = min(((m[0] - px) ** 2 + (m[1] - py) ** 2) ** 0.5 for m in monsters)
+    def radius_of(sprite):
+        return game._radius(sprite) * inv_w if inv_w else 0.05
+
+    # Things to stay away from, each with its current size and (for monsters) its
+    # heading and whether it is chasing. Frozen monsters cannot hurt the player,
+    # so they are left out while a freeze is active. Fire is never frozen.
+    moving_monsters = [] if game.freeze_time > 0 else list(game.monsters)
+    dangers = [{"x": h.cx, "y": h.cy, "r": radius_of(h),
+                "fx": 0.0, "fy": 0.0, "chasing": False} for h in list(game.hazards)]
+    for m in moving_monsters:
+        dangers.append({"x": m.cx, "y": m.cy, "r": radius_of(m),
+                        "fx": float(m.face_x), "fy": float(m.face_y),
+                        "chasing": bool(getattr(m, "chasing", False))})
+
+    # Flat position list kept for the flee logic and as a fallback.
+    danger = [(d["x"], d["y"]) for d in dangers]
+
+    all_monsters = list(game.monsters)
+    if all_monsters:
+        nearest_monster = min(((m.cx - px) ** 2 + (m.cy - py) ** 2) ** 0.5 for m in all_monsters)
     else:
         nearest_monster = None
 
@@ -95,9 +116,13 @@ def sense(game):
     return {
         "coins": coins,
         "danger": danger,
+        "dangers": dangers,
         "player": (px, py),
         "nearest_monster": nearest_monster,
         "flee_from": flee_from,
+        "time_left": getattr(game, "time_left", None),
+        "time_limit": game.level["time_limit"] if getattr(game, "level", None) else None,
+        "coins_left": len(coins),
     }
 
 
@@ -108,27 +133,52 @@ def fitness(snapshot, target_x, target_y):
 
     player_x, player_y = snapshot["player"]
 
+    # Urgency rises as the clock runs down: pull harder toward coins and accept a
+    # little more risk so the level is finished in time. Safety is never fully
+    # abandoned (the penalty reduction is capped).
+    urgency = 0.0
+    time_left = snapshot.get("time_left")
+    time_limit = snapshot.get("time_limit")
+    if time_left is not None and time_limit:
+        urgency = min(1.0, max(0.0, 1.0 - time_left / (0.6 * time_limit)))
+    coin_weight = COIN_WEIGHT * (1.0 + 2.5 * urgency)
+    hit_penalty = SAFE_HIT_PENALTY * (1.0 - 0.4 * urgency)
+
     # Attraction toward the most reachable coin, the one closest to this target.
-    # It is weak so safety comes first.
+    # It is weak so safety comes first (stronger when the clock is short).
     best_pull = 0.0
     for coin_x, coin_y in snapshot["coins"]:
         distance = ((target_x - coin_x) ** 2 + (target_y - coin_y) ** 2) ** 0.5
-        pull = COIN_WEIGHT / (distance + 0.02)
+        pull = coin_weight / (distance + 0.02)
         if pull > best_pull:
             best_pull = pull
     score = best_pull
 
     # Safety, the main driver. For every monster and fire, look at how close it
-    # comes to the straight path the player would walk to reach the target. Reward
-    # a path that stays clear and strongly punish one that comes too close, so the
-    # agent routes around danger and heads for safe ground instead of through it.
-    for danger_x, danger_y in snapshot["danger"]:
-        gap = point_segment_distance(danger_x, danger_y,
-                                     player_x, player_y, target_x, target_y)
-        if gap >= SAFE_RADIUS:
-            score += SAFE_CLEAR_BONUS
-        else:
-            score -= SAFE_HIT_PENALTY * (1.0 - gap / SAFE_RADIUS)
+    # comes to the straight path the player would walk to reach the target. The
+    # required clearance grows with the danger's own size (so pulsing fires and
+    # bigger monsters are respected), and chasers get extra berth plus a look
+    # ahead along their heading.
+    dangers = snapshot.get("dangers")
+    if dangers is not None:
+        for d in dangers:
+            lead = LOOKAHEAD if d["chasing"] else 0.0
+            ax = d["x"] + d["fx"] * lead
+            ay = d["y"] + d["fy"] * lead
+            gap = point_segment_distance(ax, ay, player_x, player_y, target_x, target_y)
+            clear = SAFE_RADIUS + d["r"] + (CHASE_MARGIN if d["chasing"] else 0.0)
+            if gap >= clear:
+                score += SAFE_CLEAR_BONUS
+            else:
+                score -= hit_penalty * (1.0 - gap / clear)
+    else:
+        for danger_x, danger_y in snapshot["danger"]:
+            gap = point_segment_distance(danger_x, danger_y,
+                                         player_x, player_y, target_x, target_y)
+            if gap >= SAFE_RADIUS:
+                score += SAFE_CLEAR_BONUS
+            else:
+                score -= hit_penalty * (1.0 - gap / SAFE_RADIUS)
 
     # If a danger is right next to the player, also reward moving away from it so
     # the agent flees instead of standing still and being hit.

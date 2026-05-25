@@ -30,9 +30,12 @@ from audio import AudioManager
 
 # Tuning values. Positions are kept as a center point in 0..1 over the play area.
 PLAYER_SPEED = 0.6          # how fast the player moves, screens per second
+# A monster's speed is capped below the player's so a chasing monster can always
+# be outrun. This keeps chase levels fair for a human and reactable for the GA.
+MAX_MONSTER_SPEED = 0.45
 PROJECTILE_SPEED = 1.2
 FIRE_COOLDOWN = 0.6         # seconds between shots
-CONTACT_DAMAGE = 60.0       # health lost per second while touching a monster/fire
+CONTACT_DAMAGE = 60.0       # default; per-level value comes from the level data
 COIN_POINTS = 100
 KILL_POINTS = 150
 TIME_BONUS = 4              # score per second left when a level has a time limit
@@ -193,6 +196,14 @@ class GameScreen(Screen):
         self.freeze_time = 0.0
         self.pending_respawns = []
         self.monster_speed = 0.45 / self.level["monster_speed"]
+        # Behavior knobs read once per level (see levels.py). These scale the
+        # difficulty without adding any sprites.
+        self.enemy_speed_mult = self.level["enemy_speed_mult"]
+        self.chase_range = self.level["chase_range"]
+        self.chase_time = self.level["chase_time"]
+        self.pulse_amp = self.level["pulse_amp"]
+        self.pulse_period = self.level["pulse_period"]
+        self.contact_damage = self.level["contact_damage"]
         self.active = True
         self.paused = False
 
@@ -239,6 +250,8 @@ class GameScreen(Screen):
                 hazard.bx, hazard.by = x, 0.9
             hazard.t = random.uniform(0, 1)
             hazard.period = self.level["fire_speed"]
+            hazard.pt = random.uniform(0, 1)   # pulse phase, separate from sweep
+            hazard.size_factor = 1.0
             hazard.cx, hazard.cy = hazard.ax, hazard.ay
             place(hazard)
             self.world.add_widget(hazard)
@@ -286,6 +299,8 @@ class GameScreen(Screen):
         monster.tx, monster.ty = self._random_point()
         monster.speed = self.monster_speed
         monster.frozen = self.freeze_time > 0
+        monster.chase_timer = 0.0   # >0 while locked onto the player
+        monster.chasing = False
         place(monster)
         self.world.add_widget(monster)
         monster.start()
@@ -364,16 +379,43 @@ class GameScreen(Screen):
         self._move_toward(self.player, self.player.tx, self.player.ty, PLAYER_SPEED * dt)
 
         if not frozen:
+            # Only the single closest monster is allowed to chase, so the player
+            # is never pincered by two at once. The other keeps patrolling.
+            nearest = None
+            if self.monsters:
+                nearest = min(self.monsters, key=lambda m:
+                              (m.cx - self.player.cx) ** 2 + (m.cy - self.player.cy) ** 2)
             for monster in self.monsters:
-                reached = self._move_toward(monster, monster.tx, monster.ty, monster.speed * dt)
-                if reached:
+                if monster is nearest and self.chase_range > 0:
+                    # Lock on when the player comes within range; the lock lasts
+                    # chase_time seconds so it keeps coming briefly after you flee.
+                    d = ((monster.cx - self.player.cx) ** 2
+                         + (monster.cy - self.player.cy) ** 2) ** 0.5
+                    if d <= self.chase_range:
+                        monster.chase_timer = self.chase_time
+                else:
+                    monster.chase_timer = 0.0
+                if monster.chase_timer > 0:
+                    monster.chase_timer -= dt
+                    monster.chasing = True
+                    monster.tx, monster.ty = self.player.cx, self.player.cy
+                else:
+                    monster.chasing = False
+                # Effective speed is capped below the player's so it stays escapable.
+                step = min(monster.speed * self.enemy_speed_mult, MAX_MONSTER_SPEED) * dt
+                reached = self._move_toward(monster, monster.tx, monster.ty, step)
+                if reached and not monster.chasing:
                     monster.tx, monster.ty = self._random_point()
 
         for hazard in self.hazards:
-            hazard.t = (hazard.t + dt / hazard.period) % 1.0
+            hazard.t = (hazard.t + dt * self.enemy_speed_mult / hazard.period) % 1.0
             phase = 0.5 - 0.5 * math.cos(hazard.t * 2 * math.pi)
             hazard.cx = hazard.ax + (hazard.bx - hazard.ax) * phase
             hazard.cy = hazard.ay + (hazard.by - hazard.ay) * phase
+            # Pulse the fire's size (and so its hitbox) so the danger zone breathes.
+            if self.pulse_amp > 0:
+                hazard.pt = (hazard.pt + dt / self.pulse_period) % 1.0
+                hazard.size_factor = 1.0 + self.pulse_amp * math.sin(hazard.pt * 2 * math.pi)
             place(hazard)
 
         self._update_projectiles(dt)
@@ -448,8 +490,10 @@ class GameScreen(Screen):
                 self.world.y + sprite.cy * self.world.height)
 
     def _radius(self, sprite):
-        return min(sprite.size_hint[0] * self.world.width,
+        base = min(sprite.size_hint[0] * self.world.width,
                    sprite.size_hint[1] * self.world.height) / 2
+        # Pulsing fires grow and shrink, so the hitbox follows the visual.
+        return base * getattr(sprite, "size_factor", 1.0)
 
     def _overlap(self, a, b, factor=0.8):
         ax, ay = self._px(a)
@@ -573,7 +617,7 @@ class GameScreen(Screen):
                     touching = True
                     break
         if touching:
-            self.health -= CONTACT_DAMAGE * dt
+            self.health -= self.contact_damage * dt
             self.player.hit_flash()
             # Play the hurt sound, but not every frame. While the player keeps
             # touching a monster or fire, repeat it on a short cadence.

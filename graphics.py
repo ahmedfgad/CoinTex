@@ -201,10 +201,12 @@ class MonsterSprite(CanvasSprite):
     hp = NumericProperty(1)
     max_hp = NumericProperty(1)
     frozen = BooleanProperty(False)
+    chasing = BooleanProperty(False)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.bind(mtype=self._redraw, hp=self._redraw, max_hp=self._redraw, frozen=self._redraw)
+        self.bind(mtype=self._redraw, hp=self._redraw, max_hp=self._redraw,
+                  frozen=self._redraw, chasing=self._redraw)
 
     def draw(self):
         x, y = self.pos
@@ -277,6 +279,10 @@ class MonsterSprite(CanvasSprite):
             # icy tint to show the monster is paused
             Color(0.6, 0.85, 1.0, 0.45)
             Ellipse(pos=(cx - r * 1.05, cy - r * 1.05), size=(r * 2.1, r * 2.1))
+        elif self.chasing:
+            # red alert ring while it is locked onto and chasing the player
+            Color(1.0, 0.2, 0.15, 0.9)
+            Line(ellipse=(cx - r * 1.18, cy - r * 1.18, r * 2.36, r * 2.36), width=2)
 
         if self.flash > 0:
             Color(1, 1, 1, self.flash * 0.85)
@@ -284,20 +290,28 @@ class MonsterSprite(CanvasSprite):
 
 
 class Hazard(CanvasSprite):
-    # A flickering flame used as a moving hazard.
+    # A flickering flame used as a moving hazard. size_factor lets the flame
+    # pulse bigger and smaller; the engine scales the hitbox by the same value.
+    size_factor = NumericProperty(1.0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(size_factor=self._redraw)
+
     def draw(self):
         x, y = self.pos
         w, h = self.size
         cx = x + w / 2
-        flick = 0.85 + 0.15 * math.sin(self.phase * 12.0)
+        sf = self.size_factor
+        flick = (0.85 + 0.15 * math.sin(self.phase * 12.0)) * sf
         Color(0.95, 0.35, 0.10, 1)
-        Triangle(points=[cx - w * 0.4, y, cx + w * 0.4, y,
+        Triangle(points=[cx - w * 0.4 * sf, y, cx + w * 0.4 * sf, y,
                          cx, y + h * flick])
         Color(1.0, 0.65, 0.15, 1)
-        Triangle(points=[cx - w * 0.26, y, cx + w * 0.26, y,
+        Triangle(points=[cx - w * 0.26 * sf, y, cx + w * 0.26 * sf, y,
                          cx, y + h * 0.72 * flick])
         Color(1.0, 0.92, 0.45, 0.95)
-        Triangle(points=[cx - w * 0.13, y, cx + w * 0.13, y,
+        Triangle(points=[cx - w * 0.13 * sf, y, cx + w * 0.13 * sf, y,
                          cx, y + h * 0.42 * flick])
 
 

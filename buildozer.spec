@@ -18,7 +18,7 @@ source.include_exts = py,png,wav
 
 # Folders to leave out of the package. PlayerGA is the old genetic algorithm
 # version (needs pygad and numpy). audio_alternatives and tools are dev only.
-source.exclude_dirs = bin, venv, .venv, .buildozer, .git, __pycache__, PlayerGA, audio_alternatives, tools, music/originals, sprite_preview
+source.exclude_dirs = bin, dist, build, venv, .venv, .buildozer, .git, __pycache__, PlayerGA, audio_alternatives, tools, music/originals, sprite_preview, cointex_media
 
 # Version shown to users.
 version = 1.3

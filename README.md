@@ -88,6 +88,8 @@ There are two game types, chosen by the host. In Co-op you share one goal and cl
 
 The Host screen shows two addresses. The same-Wi-Fi address (like 192.168.x.x) is for two devices on the same network and needs no setup. The internet address is the host's public IP; to use it the host must forward TCP port 50007 on their router to their device, because the connection is made straight to the host. The joining player types whichever address fits, into the same field. The networking uses only the Python standard library, so it adds no extra packages to the build.
 
+If the other player cannot connect to your device when you host, the host's firewall is almost always the cause. On **Windows** the first time CoinTex listens for a connection, Windows Defender Firewall shows a "Allow CoinTex to communicate on these networks" dialog. Tick **Private networks** (your home Wi-Fi) and click **Allow access**. If you dismissed the dialog earlier, open Settings, then Privacy & security, then Windows Security, then Firewall & network protection, then Allow an app through firewall, and tick CoinTex for Private networks. On **iPhone**, the first time you tap Join the system asks "Allow CoinTex to find devices on your local network" - tap Allow. If you tapped Don't Allow, re-enable it under Settings, then Privacy & Security, then Local Network. The host being on a guest Wi-Fi (which isolates devices) also blocks the link; switch both devices to the same regular Wi-Fi.
+
 ## Screenshots
 
 <table>

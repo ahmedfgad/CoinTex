@@ -70,6 +70,13 @@ echo "Creating the Xcode project ${APP_TITLE}-ios/"
 rm -rf "${APP_TITLE}-ios"
 toolchain create "$APP_TITLE" "$PROJECT_DIR"
 
+# Replace the kivy-ios template's Kivy-logo icon and launch screen with the
+# CoinTex artwork. Without this, the installed app shows the Kivy logo on the
+# home screen and again as the splash screen.
+echo "Applying the CoinTex icon and presplash"
+"$PROJECT_DIR/tools/ios_apply_assets.sh" \
+    "${APP_TITLE}-ios" cointex_logo.png cointex_presplash.png
+
 echo ""
 echo "Xcode project created: ${APP_TITLE}-ios/"
 echo ""

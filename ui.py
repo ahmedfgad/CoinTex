@@ -971,7 +971,11 @@ class HostScreen(StyledScreen):
         self._ready = False
         self.start_btn.disabled = True
         self.start_btn.bg = [0.3, 0.3, 0.35, 1]
-        self.status.text = "Waiting for a player to join..."
+        # Hosting on Windows shows a Defender Firewall dialog the first time;
+        # iOS shows a Local Network privacy prompt to the joining device. If
+        # either is denied, the other player cannot reach the host.
+        self.status.text = ("Waiting for a player to join.\n"
+                            "If your firewall asks to allow CoinTex, click Allow.")
         self._refresh_mode()
         self.net = net.NetHost()
         try:

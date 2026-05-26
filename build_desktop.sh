@@ -58,14 +58,19 @@ rm -rf build dist CoinTex.spec
 MODE="--onefile"
 [[ "$ONEFILE" -eq 0 ]] && MODE="--onedir"
 
-# The game draws everything in code, so the only data to bundle is the music and
-# sound files in music/. PyInstaller finds the Python modules on its own, and
-# Kivy ships its own PyInstaller hooks so its providers are included.
+# The game draws everything in code, so the only data to bundle are the music
+# and sound files in music/ and the CoinTex logo used for the window and exe
+# icons. PyInstaller finds the Python modules on its own, and Kivy ships its own
+# PyInstaller hooks so its providers are included. --icon makes Windows show the
+# CoinTex logo on the .exe in File Explorer and in the title bar (PyInstaller
+# converts the .png to .ico through Pillow, which Kivy already installs).
 echo "Running PyInstaller ($MODE)"
 "$PY" -m PyInstaller \
     --noconfirm --clean $MODE --windowed \
     --name CoinTex \
+    --icon cointex_logo.png \
     --add-data "music${SEP}music" \
+    --add-data "cointex_logo.png${SEP}." \
     main.py
 
 echo ""

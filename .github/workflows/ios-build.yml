@@ -80,6 +80,14 @@ jobs:
       - name: Create the Xcode project
         run: toolchain create CoinTex ios_app
 
+      # kivy-ios's template puts the Kivy logo in icon.png and ships an empty
+      # AppIcon.appiconset, so the home-screen icon and launch screen both
+      # default to the Kivy logo. Replace them with the CoinTex artwork.
+      - name: Apply the CoinTex icon and presplash
+        run: |
+          PROJ_DIR=$(ls -d *-ios | head -1)
+          tools/ios_apply_assets.sh "$PROJ_DIR" cointex_logo.png cointex_presplash.png
+
       # kivy-ios may write the folder name in lower case, so find it instead of
       # guessing. Save the names for the next steps.
       - name: Find the Xcode project

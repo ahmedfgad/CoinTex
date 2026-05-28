@@ -58,6 +58,45 @@ def app():
     return App.get_running_app()
 
 
+# --- shared layout dims --------------------------------------------------
+#
+# Fixed dp() sizes — proportional size_hint_y on every child of a vertical
+# layout means the children squeeze below readable height on short screens
+# (Android landscape, iOS, a resized Linux window). Use these constants for
+# anything in a stack so the layout stays usable.
+
+BTN_HEIGHT = dp(52)
+TITLE_HEIGHT = dp(84)
+SUBTITLE_HEIGHT = dp(48)
+INFO_HEIGHT = dp(72)
+INPUT_HEIGHT = dp(52)
+ROW_SPACING = dp(12)
+
+
+def _scroll_panel(*, size_hint=(0.72, 0.94),
+                  pos_hint=None, padding=dp(22), spacing=ROW_SPACING):
+    """Return (ScrollView, inner BoxLayout) so callers can populate the box.
+
+    Wrapping every vertical menu in a ScrollView makes the screens robust
+    to any window height: when content fits, the box stays centered; when
+    the window is shorter than the content, the user can scroll.
+    """
+    if pos_hint is None:
+        pos_hint = {"center_x": 0.5, "center_y": 0.5}
+    scroll = ScrollView(
+        size_hint=size_hint, pos_hint=pos_hint,
+        do_scroll_x=False, do_scroll_y=True, bar_width=dp(4),
+        scroll_type=["bars", "content"],
+    )
+    box = BoxLayout(
+        orientation="vertical", padding=padding, spacing=spacing,
+        size_hint_y=None,
+    )
+    box.bind(minimum_height=box.setter("height"))
+    scroll.add_widget(box)
+    return scroll, box
+
+
 class StyledButton(ButtonBehavior, Label):
     bg = ListProperty([0.20, 0.55, 0.95, 1])
 
@@ -165,31 +204,34 @@ class StyledScreen(Screen):
 
 class MenuScreen(StyledScreen):
     def build(self):
-        box = BoxLayout(orientation="vertical", padding=dp(30), spacing=dp(20),
-                        size_hint=(0.7, 0.8), pos_hint={"center_x": 0.5, "center_y": 0.5})
-        box.add_widget(Label(text="CoinTex", font_size=sp(60), bold=True,
-                             color=[1, 0.85, 0.2, 1], size_hint_y=0.4))
-        play = StyledButton(text="Play", bg=[0.2, 0.7, 0.4, 1])
-        multiplayer = StyledButton(text="Multiplayer", bg=[0.55, 0.4, 0.8, 1])
-        how = StyledButton(text="How to play", bg=[0.9, 0.6, 0.2, 1])
-        guide = StyledButton(text="Guide", bg=[0.85, 0.5, 0.25, 1])
-        about = StyledButton(text="About", bg=[0.25, 0.5, 0.9, 1])
-        settings = StyledButton(text="Settings", bg=[0.4, 0.45, 0.55, 1])
+        scroll, box = _scroll_panel(size_hint=(0.7, 0.94))
+        box.add_widget(Label(text="CoinTex", font_size=sp(48), bold=True,
+                             color=[1, 0.85, 0.2, 1],
+                             size_hint_y=None, height=TITLE_HEIGHT))
+        play = StyledButton(text="Play", bg=[0.2, 0.7, 0.4, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
+        multiplayer = StyledButton(text="Multiplayer", bg=[0.55, 0.4, 0.8, 1],
+                                   size_hint_y=None, height=BTN_HEIGHT)
+        how = StyledButton(text="How to play", bg=[0.9, 0.6, 0.2, 1],
+                           size_hint_y=None, height=BTN_HEIGHT)
+        guide = StyledButton(text="Guide", bg=[0.85, 0.5, 0.25, 1],
+                             size_hint_y=None, height=BTN_HEIGHT)
+        about = StyledButton(text="About", bg=[0.25, 0.5, 0.9, 1],
+                             size_hint_y=None, height=BTN_HEIGHT)
+        settings = StyledButton(text="Settings", bg=[0.4, 0.45, 0.55, 1],
+                                size_hint_y=None, height=BTN_HEIGHT)
         play.bind(on_release=lambda *a: app().go("worldmap"))
         multiplayer.bind(on_release=lambda *a: app().go("multiplayer"))
         how.bind(on_release=lambda *a: app().go("tutorial"))
         guide.bind(on_release=lambda *a: app().go("guide"))
         about.bind(on_release=lambda *a: app().go("about"))
         settings.bind(on_release=lambda *a: app().go("settings"))
-        box.add_widget(play)
-        box.add_widget(multiplayer)
-        box.add_widget(how)
-        box.add_widget(guide)
-        box.add_widget(about)
-        box.add_widget(settings)
-        self.stars = Label(text="", font_size=sp(18), color=[1, 1, 1, 0.85], size_hint_y=0.2)
+        for btn in (play, multiplayer, how, guide, about, settings):
+            box.add_widget(btn)
+        self.stars = Label(text="", font_size=sp(16), color=[1, 1, 1, 0.85],
+                           size_hint_y=None, height=SUBTITLE_HEIGHT)
         box.add_widget(self.stars)
-        self.root_layout.add_widget(box)
+        self.root_layout.add_widget(scroll)
 
     def on_enter(self):
         running = app()
@@ -266,38 +308,43 @@ class LevelSelectScreen(StyledScreen):
 
 class SettingsScreen(StyledScreen):
     def build(self):
-        box = BoxLayout(orientation="vertical", padding=dp(26), spacing=dp(16),
-                        size_hint=(0.8, 0.9), pos_hint={"center_x": 0.5, "center_y": 0.5})
-        box.add_widget(Label(text="Settings", font_size=sp(34), bold=True,
-                             size_hint_y=0.12, color=[1, 1, 1, 1]))
+        scroll, box = _scroll_panel(size_hint=(0.82, 0.94))
+        box.add_widget(Label(text="Settings", font_size=sp(30), bold=True,
+                             size_hint_y=None, height=TITLE_HEIGHT,
+                             color=[1, 1, 1, 1]))
 
-        self.music_btn = StyledButton(size_hint_y=0.12)
+        self.music_btn = StyledButton(size_hint_y=None, height=BTN_HEIGHT)
         self.music_btn.bind(on_release=lambda *a: self._toggle("music_on", self.music_btn, "Music"))
         box.add_widget(self.music_btn)
 
-        self.sfx_btn = StyledButton(size_hint_y=0.12)
+        self.sfx_btn = StyledButton(size_hint_y=None, height=BTN_HEIGHT)
         self.sfx_btn.bind(on_release=lambda *a: self._toggle("sfx_on", self.sfx_btn, "Sound effects"))
         box.add_widget(self.sfx_btn)
 
-        vol_row = BoxLayout(orientation="horizontal", size_hint_y=0.12, spacing=dp(10))
-        vol_row.add_widget(Label(text="Volume", font_size=sp(20), size_hint_x=0.35, color=[1, 1, 1, 1]))
+        vol_row = BoxLayout(orientation="horizontal", spacing=dp(10),
+                            size_hint_y=None, height=BTN_HEIGHT)
+        vol_row.add_widget(Label(text="Volume", font_size=sp(18),
+                                 size_hint_x=0.35, color=[1, 1, 1, 1]))
         self.volume = Slider(min=0, max=1, value=1, step=0.05, size_hint_x=0.65)
         self.volume.bind(value=self._on_volume)
         vol_row.add_widget(self.volume)
         box.add_widget(vol_row)
 
-        auto = StyledButton(text="Auto Player", bg=[0.3, 0.6, 0.55, 1], size_hint_y=0.12)
+        auto = StyledButton(text="Auto Player", bg=[0.3, 0.6, 0.55, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
         auto.bind(on_release=lambda *a: app().go("autoplayer"))
         box.add_widget(auto)
 
-        reset = StyledButton(text="Reset progress", bg=[0.85, 0.35, 0.3, 1], size_hint_y=0.12)
+        reset = StyledButton(text="Reset progress", bg=[0.85, 0.35, 0.3, 1],
+                             size_hint_y=None, height=BTN_HEIGHT)
         reset.bind(on_release=lambda *a: self._confirm_reset())
         box.add_widget(reset)
 
-        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.12)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
         back.bind(on_release=lambda *a: app().go("menu"))
         box.add_widget(back)
-        self.root_layout.add_widget(box)
+        self.root_layout.add_widget(scroll)
 
     def on_enter(self):
         running = app()
@@ -820,43 +867,48 @@ class AutoPlayerScreen(StyledScreen):
     SPEEDS = [("slow", "Slow"), ("normal", "Normal"), ("fast", "Fast")]
 
     def build(self):
-        box = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(12),
-                        size_hint=(0.88, 0.92), pos_hint={"center_x": 0.5, "center_y": 0.5})
-        box.add_widget(Label(text="Auto Player", font_size=sp(32), bold=True,
-                             size_hint_y=0.12, color=[1, 1, 1, 1]))
+        scroll, box = _scroll_panel(size_hint=(0.88, 0.94))
+        box.add_widget(Label(text="Auto Player", font_size=sp(28), bold=True,
+                             size_hint_y=None, height=TITLE_HEIGHT,
+                             color=[1, 1, 1, 1]))
         intro = Label(text="The Auto button lets a genetic-algorithm agent play for you.\n"
                            "Choose how it plays:",
-                      font_size=sp(16), size_hint_y=0.14, color=[1, 1, 1, 0.9],
-                      halign="center", valign="middle")
+                      font_size=sp(15), size_hint_y=None, height=INFO_HEIGHT,
+                      color=[1, 1, 1, 0.9], halign="center", valign="middle")
         intro.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
         box.add_widget(intro)
 
-        box.add_widget(Label(text="Play style  (safety vs collecting coins)", font_size=sp(18),
-                             bold=True, size_hint_y=0.08, color=[1, 1, 1, 1]))
+        box.add_widget(Label(text="Play style  (safety vs collecting coins)", font_size=sp(16),
+                             bold=True, size_hint_y=None, height=SUBTITLE_HEIGHT,
+                             color=[1, 1, 1, 1]))
         self.style_btns = {}
-        style_row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=0.14)
+        style_row = BoxLayout(orientation="horizontal", spacing=dp(10),
+                              size_hint_y=None, height=BTN_HEIGHT)
         for key, label in self.STYLES:
-            b = StyledButton(text=label, font_size=sp(18))
+            b = StyledButton(text=label, font_size=sp(17))
             b.bind(on_release=lambda w, k=key: self._set("ga_style", k))
             self.style_btns[key] = b
             style_row.add_widget(b)
         box.add_widget(style_row)
 
-        box.add_widget(Label(text="Reaction speed  (how often it re-decides)", font_size=sp(18),
-                             bold=True, size_hint_y=0.08, color=[1, 1, 1, 1]))
+        box.add_widget(Label(text="Reaction speed  (how often it re-decides)", font_size=sp(16),
+                             bold=True, size_hint_y=None, height=SUBTITLE_HEIGHT,
+                             color=[1, 1, 1, 1]))
         self.speed_btns = {}
-        speed_row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=0.14)
+        speed_row = BoxLayout(orientation="horizontal", spacing=dp(10),
+                              size_hint_y=None, height=BTN_HEIGHT)
         for key, label in self.SPEEDS:
-            b = StyledButton(text=label, font_size=sp(18))
+            b = StyledButton(text=label, font_size=sp(17))
             b.bind(on_release=lambda w, k=key: self._set("ga_speed", k))
             self.speed_btns[key] = b
             speed_row.add_widget(b)
         box.add_widget(speed_row)
 
-        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.12)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
         back.bind(on_release=lambda *a: app().go("settings"))
         box.add_widget(back)
-        self.root_layout.add_widget(box)
+        self.root_layout.add_widget(scroll)
 
     def on_enter(self):
         app().audio.play_menu_music()
@@ -879,25 +931,29 @@ class AutoPlayerScreen(StyledScreen):
 class MultiplayerMenuScreen(StyledScreen):
     # Pick whether to host a game or join one.
     def build(self):
-        box = BoxLayout(orientation="vertical", padding=dp(30), spacing=dp(20),
-                        size_hint=(0.7, 0.8), pos_hint={"center_x": 0.5, "center_y": 0.5})
-        box.add_widget(Label(text="Multiplayer", font_size=sp(44), bold=True,
-                             color=[1, 0.85, 0.2, 1], size_hint_y=0.3))
+        scroll, box = _scroll_panel(size_hint=(0.72, 0.94))
+        box.add_widget(Label(text="Multiplayer", font_size=sp(36), bold=True,
+                             color=[1, 0.85, 0.2, 1],
+                             size_hint_y=None, height=TITLE_HEIGHT))
         info = Label(text="Play with a friend over the network.\n"
                           "One device hosts and the other joins with the host's address.",
-                     font_size=sp(16), color=[1, 1, 1, 0.9], halign="center",
-                     valign="middle", size_hint_y=0.22)
+                     font_size=sp(15), color=[1, 1, 1, 0.9], halign="center",
+                     valign="middle",
+                     size_hint_y=None, height=dp(80))
         info.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
         box.add_widget(info)
-        host = StyledButton(text="Host Game", bg=[0.2, 0.7, 0.4, 1])
-        join = StyledButton(text="Join Game", bg=[0.25, 0.5, 0.9, 1])
-        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1])
+        host = StyledButton(text="Host Game", bg=[0.2, 0.7, 0.4, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
+        join = StyledButton(text="Join Game", bg=[0.25, 0.5, 0.9, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
         host.bind(on_release=lambda *a: app().go("mphost"))
         join.bind(on_release=lambda *a: app().go("mpjoin"))
         back.bind(on_release=lambda *a: app().go("menu"))
         for b in (host, join, back):
             box.add_widget(b)
-        self.root_layout.add_widget(box)
+        self.root_layout.add_widget(scroll)
 
     def on_enter(self):
         app().audio.play_menu_music()
@@ -914,40 +970,48 @@ class HostScreen(StyledScreen):
         self._ready = False
         self._handed_off = False
         self._ip_token = 0
-        box = BoxLayout(orientation="vertical", padding=dp(20), spacing=dp(10),
-                        size_hint=(0.86, 0.94), pos_hint={"center_x": 0.5, "center_y": 0.5})
-        box.add_widget(Label(text="Host a Game", font_size=sp(30), bold=True,
-                             color=[1, 1, 1, 1], size_hint_y=0.1))
-        self.addr_label = Label(text="", font_size=sp(20), bold=True, color=[0.6, 0.95, 1, 1],
-                                halign="center", valign="middle", size_hint_y=0.13)
+        scroll, box = _scroll_panel(size_hint=(0.88, 0.95))
+        box.add_widget(Label(text="Host a Game", font_size=sp(26), bold=True,
+                             color=[1, 1, 1, 1],
+                             size_hint_y=None, height=TITLE_HEIGHT))
+        self.addr_label = Label(text="", font_size=sp(18), bold=True,
+                                color=[0.6, 0.95, 1, 1],
+                                halign="center", valign="middle",
+                                size_hint_y=None, height=dp(70))
         self.addr_label.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
         box.add_widget(self.addr_label)
         # Help for playing across the internet (the local address only works on
         # the same Wi-Fi). Filled in once the public address is looked up.
-        self.inet_label = Label(text="", font_size=sp(14), color=[1, 1, 1, 0.85],
-                                halign="center", valign="middle", size_hint_y=0.16)
+        self.inet_label = Label(text="", font_size=sp(13), color=[1, 1, 1, 0.85],
+                                halign="center", valign="middle",
+                                size_hint_y=None, height=dp(80))
         self.inet_label.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
         box.add_widget(self.inet_label)
-        box.add_widget(Label(text="Game type", font_size=sp(18), bold=True,
-                             size_hint_y=0.07, color=[1, 1, 1, 1]))
+        box.add_widget(Label(text="Game type", font_size=sp(16), bold=True,
+                             size_hint_y=None, height=SUBTITLE_HEIGHT,
+                             color=[1, 1, 1, 1]))
         self.mode_btns = {}
-        row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=0.14)
+        row = BoxLayout(orientation="horizontal", spacing=dp(10),
+                        size_hint_y=None, height=BTN_HEIGHT)
         for key, label in self.MODES:
-            b = StyledButton(text=label, font_size=sp(18))
+            b = StyledButton(text=label, font_size=sp(17))
             b.bind(on_release=lambda w, k=key: self._set_mode(k))
             self.mode_btns[key] = b
             row.add_widget(b)
         box.add_widget(row)
-        self.status = Label(text="", font_size=sp(17), color=[1, 1, 1, 0.9], size_hint_y=0.12)
+        self.status = Label(text="", font_size=sp(15), color=[1, 1, 1, 0.9],
+                            size_hint_y=None, height=dp(54))
         box.add_widget(self.status)
-        self.start_btn = StyledButton(text="Start", bg=[0.3, 0.3, 0.35, 1], size_hint_y=0.14)
+        self.start_btn = StyledButton(text="Start", bg=[0.3, 0.3, 0.35, 1],
+                                      size_hint_y=None, height=BTN_HEIGHT)
         self.start_btn.bind(on_release=lambda *a: self._start())
         self.start_btn.disabled = True
         box.add_widget(self.start_btn)
-        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.12)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
         back.bind(on_release=lambda *a: self._leave())
         box.add_widget(back)
-        self.root_layout.add_widget(box)
+        self.root_layout.add_widget(scroll)
 
     def on_enter(self):
         app().audio.play_menu_music()
@@ -1072,28 +1136,33 @@ class JoinScreen(StyledScreen):
         self.net = None
         self._poll = None
         self._handed_off = False
-        box = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(14),
-                        size_hint=(0.82, 0.82), pos_hint={"center_x": 0.5, "center_y": 0.5})
-        box.add_widget(Label(text="Join a Game", font_size=sp(34), bold=True,
-                             color=[1, 1, 1, 1], size_hint_y=0.16))
+        scroll, box = _scroll_panel(size_hint=(0.84, 0.94))
+        box.add_widget(Label(text="Join a Game", font_size=sp(28), bold=True,
+                             color=[1, 1, 1, 1],
+                             size_hint_y=None, height=TITLE_HEIGHT))
         prompt = Label(text="Type the host's address (shown on the host's screen).\n"
                             "It can be a same-Wi-Fi address or a public internet one.",
-                       font_size=sp(16), color=[1, 1, 1, 0.9], halign="center",
-                       valign="middle", size_hint_y=0.16)
+                       font_size=sp(15), color=[1, 1, 1, 0.9], halign="center",
+                       valign="middle",
+                       size_hint_y=None, height=dp(72))
         prompt.bind(size=lambda l, *a: setattr(l, "text_size", l.size))
         box.add_widget(prompt)
-        self.ip_input = TextInput(text="", multiline=False, font_size=sp(22),
-                                  size_hint_y=0.16, write_tab=False)
+        self.ip_input = TextInput(text="", multiline=False, font_size=sp(20),
+                                  size_hint_y=None, height=INPUT_HEIGHT,
+                                  write_tab=False)
         box.add_widget(self.ip_input)
-        self.status = Label(text="", font_size=sp(17), color=[1, 1, 1, 0.9], size_hint_y=0.12)
+        self.status = Label(text="", font_size=sp(15), color=[1, 1, 1, 0.9],
+                            size_hint_y=None, height=dp(48))
         box.add_widget(self.status)
-        self.connect_btn = StyledButton(text="Connect", bg=[0.2, 0.7, 0.4, 1], size_hint_y=0.16)
+        self.connect_btn = StyledButton(text="Connect", bg=[0.2, 0.7, 0.4, 1],
+                                        size_hint_y=None, height=BTN_HEIGHT)
         self.connect_btn.bind(on_release=lambda *a: self._connect())
         box.add_widget(self.connect_btn)
-        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.14)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
         back.bind(on_release=lambda *a: self._leave())
         box.add_widget(back)
-        self.root_layout.add_widget(box)
+        self.root_layout.add_widget(scroll)
 
     def on_enter(self):
         app().audio.play_menu_music()

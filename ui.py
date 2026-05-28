@@ -18,7 +18,7 @@ from kivy.uix.slider import Slider
 from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
-from kivy.graphics import Color, RoundedRectangle, Rectangle, Ellipse
+from kivy.graphics import Color, RoundedRectangle, Rectangle, Ellipse, Line
 from kivy.metrics import sp, dp
 from kivy.clock import Clock
 from kivy.properties import ListProperty, NumericProperty, BooleanProperty
@@ -270,40 +270,334 @@ class WorldMapScreen(StyledScreen):
             self.grid.add_widget(btn)
 
 
+class StarRow(Widget):
+    """Three-star row drawn with graphics.draw_star.
+
+    Sits above each LevelNode on the candy-trail map. Ported from
+    GateRunner — same widget, same NumericProperty, so the existing
+    graphics.draw_star helper renders the gold + faint star pattern.
+    """
+
+    stars = NumericProperty(0)
+
+    def __init__(self, stars: int = 0, **kwargs):
+        super().__init__(**kwargs)
+        self.stars = stars
+        self.bind(pos=self._redraw, size=self._redraw, stars=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *_):
+        self.canvas.clear()
+        if self.width <= 1 or self.height <= 1:
+            return
+        x, y = self.pos
+        w, h = self.size
+        slot = w / 3
+        outer = min(slot, h) * 0.42
+        cy = y + h * 0.5
+        with self.canvas:
+            for i in range(3):
+                cx = x + slot * (i + 0.5)
+                color = (1.0, 0.85, 0.20, 1.0) if i < self.stars else (1.0, 1.0, 1.0, 0.22)
+                graphics.draw_star(cx, cy, outer, color)
+
+
+class LevelNode(ButtonBehavior, Widget):
+    """Candy-Crush-style circular level node — ported from GateRunner.
+
+    Visual stack (bottom→top):
+      1. Drop shadow
+      2. Yellow glow halo (only on the "next-to-play" node)
+      3. Outer ring (theme accent / green for cleared / red for boss / gray for locked)
+      4. Inner filled disc
+      5. Specular highlight near the top — polished-button feel
+      6. Bold level-number label (always visible; dimmed when locked)
+      7. StarRow above the node when the level has been won
+    """
+
+    NODE_RADIUS = dp(40)
+    BOSS_RADIUS = dp(54)
+    STAR_STRIP_HEIGHT = dp(24)
+    RING_PAD = dp(5)
+    SHADOW_OFFSET = dp(3)
+
+    def __init__(self, *, level_index, in_world, is_boss, unlocked, stars,
+                 theme, on_click, is_next: bool = False, **kwargs):
+        radius = self.BOSS_RADIUS if is_boss else self.NODE_RADIUS
+        total_size = radius * 2 + self.RING_PAD * 2 + self.SHADOW_OFFSET
+        super().__init__(size_hint=(None, None),
+                         size=(total_size, total_size + self.STAR_STRIP_HEIGHT),
+                         **kwargs)
+        self.level_index = level_index
+        self.in_world = in_world
+        self.is_boss = is_boss
+        self.unlocked = unlocked
+        self.stars = stars
+        self.is_next = is_next
+        self._on_click = on_click
+        self._theme = theme
+        self._radius = radius
+        self._build_canvas()
+        self._build_children()
+        self.bind(pos=self._sync, size=self._sync)
+        self._sync()
+
+    def _palette(self) -> dict:
+        accent = self._theme["accent"]
+        if not self.unlocked:
+            return {
+                "ring":      (0.42, 0.44, 0.50, 0.92),
+                "inner":     (0.22, 0.24, 0.30, 0.94),
+                "label":     (1.0, 1.0, 1.0, 0.32),
+                "highlight": 0.10,
+            }
+        if self.is_boss:
+            return {
+                "ring":      (1.00, 0.55, 0.30, 1.00),
+                "inner":     (0.62, 0.14, 0.14, 1.00),
+                "label":     (1.0, 1.0, 1.0, 1.0),
+                "highlight": 0.22,
+            }
+        if self.stars > 0:
+            return {
+                "ring":      (0.40, 0.85, 0.50, 1.00),
+                "inner":     (0.18, 0.46, 0.28, 1.00),
+                "label":     (1.0, 1.0, 1.0, 1.0),
+                "highlight": 0.20,
+            }
+        return {
+            "ring":      (accent[0], accent[1], accent[2], 1.00),
+            "inner":     (0.20, 0.55, 0.92, 1.00),
+            "label":     (1.0, 1.0, 1.0, 1.0),
+            "highlight": 0.20,
+        }
+
+    def _build_canvas(self) -> None:
+        pal = self._palette()
+        with self.canvas:
+            self._shadow_color = Color(0, 0, 0,
+                                       0.42 if self.unlocked else 0.22)
+            self._shadow = Ellipse()
+            self._glow_color = Color(1.0, 0.92, 0.30,
+                                     0.55 if self.is_next else 0.0)
+            self._glow = Ellipse()
+            self._ring_color = Color(*pal["ring"])
+            self._ring = Ellipse()
+            self._inner_color = Color(*pal["inner"])
+            self._inner = Ellipse()
+            self._highlight_color = Color(1.0, 1.0, 1.0, pal["highlight"])
+            self._highlight = Ellipse()
+
+    def _build_children(self) -> None:
+        pal = self._palette()
+        text = str(self.in_world)
+        font_size = sp(30) if self.is_boss else sp(24)
+        self._label = Label(text=text, font_size=font_size, bold=True,
+                            color=pal["label"],
+                            halign="center", valign="middle")
+        self.add_widget(self._label)
+        self._star_row = None
+        if self.unlocked and self.stars > 0:
+            self._star_row = StarRow(stars=self.stars)
+            self.add_widget(self._star_row)
+
+    def _sync(self, *_):
+        x, y = self.pos
+        r = self._radius
+        ring_pad = self.RING_PAD
+        shadow = self.SHADOW_OFFSET
+        disc_x = x + ring_pad
+        disc_y = y + ring_pad
+        self._shadow.pos = (disc_x - ring_pad + shadow,
+                            disc_y - ring_pad - shadow)
+        self._shadow.size = (r * 2 + ring_pad * 2, r * 2 + ring_pad * 2)
+        glow_pad = ring_pad + dp(6)
+        self._glow.pos = (disc_x - glow_pad, disc_y - glow_pad)
+        self._glow.size = (r * 2 + glow_pad * 2, r * 2 + glow_pad * 2)
+        self._ring.pos = (disc_x - ring_pad, disc_y - ring_pad)
+        self._ring.size = (r * 2 + ring_pad * 2, r * 2 + ring_pad * 2)
+        self._inner.pos = (disc_x, disc_y)
+        self._inner.size = (r * 2, r * 2)
+        hi_w = r * 1.4
+        hi_h = r * 0.45
+        self._highlight.pos = (disc_x + r - hi_w / 2,
+                               disc_y + r * 1.05)
+        self._highlight.size = (hi_w, hi_h)
+        self._label.pos = (disc_x, disc_y)
+        self._label.size = (r * 2, r * 2)
+        self._label.text_size = self._label.size
+        if self._star_row is not None:
+            self._star_row.pos = (disc_x, disc_y + r * 2 + dp(4))
+            self._star_row.size = (r * 2, self.STAR_STRIP_HEIGHT - dp(4))
+
+    def on_release(self):
+        running = app()
+        if not self.unlocked:
+            if running and getattr(running, "audio", None):
+                running.audio.play_sfx("hit")
+            return
+        self._on_click(self.level_index)
+
+
 class LevelSelectScreen(StyledScreen):
+    """Candy-Crush-style level map for the current world.
+
+    10 circular LevelNodes on a zigzag path, level 1 at the bottom
+    (player climbs upward), level 10 (boss) at the top. ScrollView so
+    every node fits on any phone height. Auto-scrolls to the highest
+    unlocked level on entry. Ported from GateRunner.
+    """
+
+    theme_world = 1
+    NODE_SPACING_Y = dp(82)
+    NODE_LEFT_X_FRAC = 0.30
+    NODE_RIGHT_X_FRAC = 0.70
+
     def build(self):
-        self.outer = BoxLayout(orientation="vertical", padding=dp(20), spacing=dp(12))
-        self.title = Label(text="", font_size=sp(30), bold=True, size_hint_y=0.14, color=[1, 1, 1, 1])
-        self.outer.add_widget(self.title)
-        self.grid = GridLayout(cols=5, spacing=dp(12), size_hint_y=0.72)
-        self.outer.add_widget(self.grid)
-        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.14)
-        back.bind(on_release=lambda *a: app().go("worldmap"))
-        self.outer.add_widget(back)
-        self.root_layout.add_widget(self.outer)
+        outer = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+
+        self.title_label = Label(
+            text="", font_size=sp(26), bold=True, color=[1, 1, 1, 1],
+            size_hint_y=None, height=dp(50),
+        )
+        outer.add_widget(self.title_label)
+
+        self.scroll = ScrollView(
+            size_hint=(1, 1), do_scroll_x=False, do_scroll_y=True,
+            bar_width=dp(4), scroll_type=["bars", "content"],
+        )
+        self.map_widget = Widget(
+            size_hint=(1, None),
+            height=self.NODE_SPACING_Y * levels.LEVELS_PER_WORLD + dp(80),
+        )
+        self.scroll.add_widget(self.map_widget)
+        outer.add_widget(self.scroll)
+
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
+        back.bind(on_release=lambda *_: app().go("worldmap"))
+        outer.add_widget(back)
+
+        self.root_layout.add_widget(outer)
+        self.map_widget.bind(
+            width=lambda *_: self._layout_nodes(),
+            height=lambda *_: self._layout_nodes(),
+        )
 
     def on_enter(self):
         running = app()
         running.audio.play_menu_music()
         world = running.current_world
         theme = levels.get_world(world)
-        self.title.text = "World {}  -  {}".format(world, theme["name"])
+        self.title_label.text = "World {}  -  {}".format(world, theme["name"])
         self.bg.set_theme(theme)
-        self.grid.clear_widgets()
-        for lvl in levels.levels_in_world(world):
+
+        self.map_widget.clear_widgets()
+        self.map_widget.canvas.before.clear()
+
+        nodes_data = list(levels.levels_in_world(world))
+        # "Next to play" = lowest unlocked level not yet beaten.
+        next_index = None
+        for lvl in nodes_data:
+            idx = lvl["index"]
+            if running.state.is_unlocked(idx) and running.state.get_stars(idx) == 0:
+                next_index = idx
+                break
+
+        for lvl in nodes_data:
             index = lvl["index"]
             unlocked = running.state.is_unlocked(index)
             stars = running.state.get_stars(index)
-            # Show the world and level number on every button, locked or not, and
-            # draw real stars for the rating instead of asterisks.
-            label = "W{} L{}".format(lvl["world"], lvl["world_index"])
-            if unlocked:
-                btn = LevelButton(text=label, bg=[0.25, 0.55, 0.9, 1])
-                btn.stars = stars
-                btn.bind(on_release=lambda b, i=index: running.start_level(i))
-            else:
-                btn = StyledButton(text=label + "\nLocked", bg=[0.3, 0.3, 0.35, 1], halign="center")
-            self.grid.add_widget(btn)
+            in_world = lvl["world_index"]
+            is_boss = (in_world == levels.LEVELS_PER_WORLD)
+            node = LevelNode(
+                level_index=index, in_world=in_world, is_boss=is_boss,
+                unlocked=unlocked, stars=stars, theme=theme,
+                is_next=(index == next_index),
+                on_click=lambda i: running.start_level(i),
+            )
+            self.map_widget.add_widget(node)
+
+        Clock.schedule_once(lambda _dt: self._layout_nodes(), 0)
+        Clock.schedule_once(lambda _dt: self._scroll_to_highest(), 0)
+
+    def _layout_nodes(self) -> None:
+        nodes = [c for c in self.map_widget.children if isinstance(c, LevelNode)]
+        if not nodes:
+            return
+        nodes.sort(key=lambda nd: nd.in_world)
+        n = len(nodes)
+        map_w = self.map_widget.width
+        map_h = self.map_widget.height
+        if map_w <= 1 or map_h <= 1:
+            return
+        centres: list[tuple[float, float]] = []
+        for i, node in enumerate(nodes):
+            x_frac = (self.NODE_LEFT_X_FRAC
+                      if i % 2 == 0
+                      else self.NODE_RIGHT_X_FRAC)
+            y_frac = (i + 0.5) / n
+            cx = map_w * x_frac
+            cy = map_h * y_frac
+            r = node._radius
+            ring_pad = LevelNode.RING_PAD
+            node.x = cx - r - ring_pad
+            node.y = cy - r - ring_pad
+            centres.append((cx, cy))
+
+        # Smooth quadratic-Bezier path between consecutive centres,
+        # control point offset perpendicular to each segment with sign
+        # alternating per segment for the gentle weaving "candy path"
+        # look (vs sharp zigzag corners).
+        SAMPLES_PER_SEG = 18
+        path_points: list[float] = []
+        for i in range(len(centres) - 1):
+            p0x, p0y = centres[i]
+            p1x, p1y = centres[i + 1]
+            mx = (p0x + p1x) * 0.5
+            my = (p0y + p1y) * 0.5
+            dx = p1x - p0x
+            dy = p1y - p0y
+            seg_len = (dx * dx + dy * dy) ** 0.5 or 1.0
+            perp_x = -dy / seg_len
+            perp_y = dx / seg_len
+            offset = seg_len * 0.18 * (1 if i % 2 == 0 else -1)
+            cx_ctl = mx + perp_x * offset
+            cy_ctl = my + perp_y * offset
+            for s in range(SAMPLES_PER_SEG + 1):
+                if i > 0 and s == 0:
+                    continue
+                t = s / SAMPLES_PER_SEG
+                u = 1.0 - t
+                x = u * u * p0x + 2 * u * t * cx_ctl + t * t * p1x
+                y = u * u * p0y + 2 * u * t * cy_ctl + t * t * p1y
+                path_points.extend([x, y])
+
+        self.map_widget.canvas.before.clear()
+        with self.map_widget.canvas.before:
+            Color(0, 0, 0, 0.30)
+            Line(points=path_points, width=dp(8),
+                 joint="round", cap="round")
+            Color(0.82, 0.70, 0.45, 0.78)
+            Line(points=path_points, width=dp(6),
+                 joint="round", cap="round")
+            Color(1.0, 0.95, 0.78, 0.55)
+            Line(points=path_points, width=dp(2),
+                 joint="round", cap="round")
+
+    def _scroll_to_highest(self) -> None:
+        running = app()
+        nodes = [c for c in self.map_widget.children if isinstance(c, LevelNode)]
+        if not nodes:
+            return
+        nodes.sort(key=lambda nd: nd.in_world)
+        highest = 1
+        for node in nodes:
+            if node.unlocked:
+                highest = node.in_world
+        n = len(nodes)
+        scroll_y = (highest - 1) / max(1, n - 1)
+        self.scroll.scroll_y = max(0.0, min(1.0, scroll_y))
 
 
 class SettingsScreen(StyledScreen):

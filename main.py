@@ -15,6 +15,7 @@ import kivy.app
 from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.graphics import Color, RoundedRectangle, Rectangle
@@ -99,22 +100,50 @@ def place(sprite):
 
 
 class ResultOverlay(ModalView):
-    # Shown when a level is won or lost. Offers next/retry/menu actions.
-    def __init__(self, title, lines, buttons, stars=None, **kwargs):
-        super().__init__(size_hint=(0.8, 0.6), auto_dismiss=False, **kwargs)
-        box = BoxLayout(orientation="vertical", padding=dp(22), spacing=dp(12))
+    """Shown when a level is won or lost.
+
+    Optional ``stats`` dict — when present, renders a structured stats
+    grid (Coins / Score / Time / Health) below the title in two-column
+    label-value form, ported from GateRunner's LevelResultDialog.
+    Callers that only pass ``lines`` keep the old behaviour.
+    """
+
+    def __init__(self, title, lines, buttons, stars=None, stats=None, **kwargs):
+        # Taller than before to fit the stats grid.
+        super().__init__(size_hint=(0.84, 0.74), auto_dismiss=False, **kwargs)
+        box = BoxLayout(orientation="vertical", padding=dp(22), spacing=dp(10))
         with box.canvas.before:
-            Color(0.12, 0.14, 0.22, 0.98)
+            Color(0.10, 0.12, 0.18, 0.98)
             self._bg = RoundedRectangle(radius=[dp(16)])
         box.bind(pos=lambda *a: setattr(self._bg, "pos", box.pos),
                  size=lambda *a: setattr(self._bg, "size", box.size))
-        box.add_widget(Label(text=title, font_size=sp(34), bold=True,
-                             color=[1, 0.85, 0.2, 1], size_hint_y=0.26))
+        box.add_widget(Label(text=title, font_size=sp(30), bold=True,
+                             color=[1, 0.85, 0.2, 1], size_hint_y=0.18))
         if stars is not None:
-            box.add_widget(graphics.StarRow(earned=stars, total=3, size_hint_y=0.28))
-        box.add_widget(Label(text="\n".join(lines), font_size=sp(20),
-                             color=[1, 1, 1, 1], halign="center", size_hint_y=0.22))
-        row = BoxLayout(orientation="horizontal", spacing=dp(12), size_hint_y=0.3)
+            box.add_widget(graphics.StarRow(earned=stars, total=3, size_hint_y=0.20))
+        if stats:
+            # Two-column grid: small uppercase label on the left, bold
+            # value on the right. Drives at-a-glance readability — the
+            # player can tell what they did this run beyond the score.
+            grid = GridLayout(cols=2, spacing=(dp(8), dp(4)),
+                              size_hint_y=0.36,
+                              padding=(dp(16), 0, dp(16), 0))
+            for key, value, accent in stats:
+                lbl = Label(text=key, font_size=sp(15), color=(1, 1, 1, 0.78),
+                            halign="right", valign="middle", size_hint_x=0.45)
+                lbl.bind(size=lambda l, *_: setattr(l, "text_size", l.size))
+                grid.add_widget(lbl)
+                val = Label(text=value, font_size=sp(16), bold=True,
+                            color=accent, markup=True,
+                            halign="left", valign="middle", size_hint_x=0.55)
+                val.bind(size=lambda l, *_: setattr(l, "text_size", l.size))
+                grid.add_widget(val)
+            box.add_widget(grid)
+        else:
+            box.add_widget(Label(text="\n".join(lines), font_size=sp(20),
+                                 color=[1, 1, 1, 1], halign="center",
+                                 size_hint_y=0.22))
+        row = BoxLayout(orientation="horizontal", spacing=dp(12), size_hint_y=0.22)
         for text, color, callback in buttons:
             btn = ui.StyledButton(text=text, bg=color)
             btn.bind(on_release=lambda b, cb=callback: (self.dismiss(), cb()))
@@ -921,6 +950,33 @@ class GameScreen(Screen):
             self.time_label.text = "Time {}".format(int(self.time_left))
 
     # ----- win / lose -----
+    def _build_result_stats(self, score):
+        """Build the stats table for ResultOverlay (label, value, accent).
+
+        Same pattern as GateRunner's LevelResultDialog: small label on
+        the left, bold numeric value on the right, accent colour per row.
+        Shown both on win and loss so the player always sees what
+        happened in this attempt.
+        """
+        total_coins = self.level["coins"] if self.level else 0
+        collected = total_coins - len(self.coins)
+        time_str = (
+            "{}".format(int(max(0, self.time_left)))
+            if self.time_left is not None else "-"
+        )
+        if self.time_left is not None and self.level:
+            time_str += " / {}".format(int(self.level["time_limit"]))
+        health = int(self.player.health) if self.player else 0
+        max_h = int(self.player.max_health) if self.player else 0
+        return [
+            ("Score",   "[b]{}[/b]".format(score),     (1.0, 0.92, 0.40, 1.0)),
+            ("Coins",   "[b]{}[/b] of {}".format(collected, total_coins),
+                                                       (1.0, 0.85, 0.30, 1.0)),
+            ("Time",    "[b]{}[/b]".format(time_str),  (0.65, 0.85, 1.0, 1.0)),
+            ("Health",  "[b]{}[/b] / {}".format(health, max_h),
+                                                       (0.95, 0.50, 0.45, 1.0)),
+        ]
+
     def _score_and_stars(self):
         score = self.score + int(self.player.health) * 3
         if self.time_left is not None:
@@ -949,8 +1005,8 @@ class GameScreen(Screen):
         buttons = [("Menu", [0.45, 0.45, 0.5, 1], lambda: app.go("levelselect"))]
         if next_index <= levels.NUM_LEVELS:
             buttons.append(("Next", [0.2, 0.7, 0.4, 1], lambda: app.start_level(next_index)))
-        lines = ["Score: {}".format(score)]
-        ResultOverlay("Level Clear!", lines, buttons, stars=stars).open()
+        stats = self._build_result_stats(score)
+        ResultOverlay("Level Clear!", [], buttons, stars=stars, stats=stats).open()
 
     def _lose(self):
         if not self.active:
@@ -967,7 +1023,8 @@ class GameScreen(Screen):
             ("Retry", [0.9, 0.5, 0.2, 1], lambda: app.start_level(self.index)),
         ]
         reason = "Out of time!" if (self.time_left is not None and self.time_left <= 0) else "You were caught!"
-        ResultOverlay(reason, ["Score: {}".format(self.score)], buttons).open()
+        stats = self._build_result_stats(self.score)
+        ResultOverlay(reason, [], buttons, stats=stats).open()
 
     # ----- multiplayer end of game -----
     def _end_coop(self, cleared, reason=""):

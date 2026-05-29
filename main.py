@@ -190,6 +190,7 @@ class GameScreen(Screen):
         self.player2 = None          # the second character, only in multiplayer
         self.local_player = None     # the character this device controls
         self.remote_player = None    # the other device's character
+        self._mp_prev_local_collected = 0   # client coin-pop delta tracker
         self._net_event = None       # the host's snapshot broadcast timer
         self._rng = random           # swapped for a seeded one in multiplayer
         self._last_input = (0.1, 0.12)   # last target a client sent to the host
@@ -326,6 +327,9 @@ class GameScreen(Screen):
             self.local_player, self.remote_player = self.player2, self.player
         else:
             self.local_player, self.remote_player = self.player, self.player2
+        # Client coin-pop tracking: last-seen collected count for THIS device's
+        # player, so we pop "+N" only for our own pickups (not the opponent's).
+        self._mp_prev_local_collected = 0
 
         # monsters (they respawn when killed, so they cannot all be cleared)
         for i in range(self.level["monsters"]):
@@ -848,7 +852,11 @@ class GameScreen(Screen):
             picker = self._toucher(coin, factor=0.7)
             if picker is None:
                 continue
-            self._coin_pop(coin)
+            # Pop only for THIS device's own player (single-player always; in
+            # multiplayer the host pops its own, the client pops via the
+            # per-player collected count in _apply_client_hud).
+            if picker is self.local_player:
+                self._coin_pop(coin)
             self.coins.remove(coin)
             coin.stop()
             if coin.parent:
@@ -1230,10 +1238,10 @@ class GameScreen(Screen):
         keep = set(remaining)
         for coin in list(self.coins):
             if coin.index not in keep:
-                # A coin vanished from the host's snapshot → it was just
-                # collected; pop a "+N" at its position so the client sees
-                # the same feedback.
-                self._coin_pop(coin)
+                # The "+N" pop for the client's own pickups is driven by the
+                # per-player collected count in _apply_client_hud (so we pop
+                # only our coins, not the opponent's). Here we just remove the
+                # coins the host says are gone.
                 self.coins.remove(coin)
                 coin.stop()
                 if coin.parent:
@@ -1279,6 +1287,28 @@ class GameScreen(Screen):
                 h1, hud.get("c1", 0), h2, hud.get("c2", 0))
         else:
             self.mp_label.text = "P1 {}%    P2 {}%".format(h1, h2)
+        # Pop "+N" for each coin THIS device's player just collected — c1 if we
+        # drive player 1, else c2 (the client drives player 2). Only our own.
+        local_collected = (hud.get("c1", 0) if self.local_player is self.player
+                           else hud.get("c2", 0))
+        if local_collected > self._mp_prev_local_collected:
+            delta = local_collected - self._mp_prev_local_collected
+            self._coin_pop_at_player(delta)
+        self._mp_prev_local_collected = local_collected
+
+    def _coin_pop_at_player(self, count):
+        # Rising "+N" pop at the local player's position (client-side coin
+        # feedback, since the client doesn't know each coin's exact position).
+        if self.local_player is None or count <= 0:
+            return
+        try:
+            px, py = self._px(self.local_player)
+            fs = max(18.0, self.world.height * 0.05)
+            self.world.add_widget(graphics.FloatingText(
+                (px, py), "+{}".format(COIN_POINTS * count),
+                color=(1.0, 0.85, 0.25), font_size=fs))
+        except Exception:
+            pass
 
     # ----- pause -----
     def _open_pause(self):

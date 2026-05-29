@@ -20,6 +20,11 @@ import threading
 import queue
 import urllib.request
 
+try:
+    import ssl
+except ImportError:  # a Python build without the _ssl module
+    ssl = None
+
 DEFAULT_PORT = 50007
 PROTOCOL_VERSION = 1
 CONNECT_TIMEOUT = 6.0           # seconds to wait when joining a host
@@ -55,21 +60,57 @@ PUBLIC_IP_SERVICES = ("https://api.ipify.org", "https://ifconfig.me/ip",
                       "http://icanhazip.com")
 
 
+def _ssl_contexts():
+    # SSL contexts to try for the HTTPS lookups, most-trusted first.
+    #
+    # Desktop Python finds the system CA bundle, so the default verified context
+    # works. The Python shipped inside the iOS / Android builds has no CA bundle,
+    # so certificate verification raises SSLCertVerificationError and every HTTPS
+    # request fails there (which is why the public IP never showed up on mobile,
+    # while the socket-based local IP did). The unverified context is the fallback
+    # that makes the lookup work on mobile. We only read back our *own* IP and
+    # send no secrets, so doing that single request without verification is an
+    # acceptable trade-off. certifi is used automatically if it happens to be
+    # installed, but it is not required.
+    if ssl is None:
+        # No ssl module at all — let urllib use its own default handling.
+        return [None]
+    contexts = []
+    try:
+        import certifi
+        contexts.append(ssl.create_default_context(cafile=certifi.where()))
+    except Exception:
+        pass
+    try:
+        contexts.append(ssl.create_default_context())
+    except Exception:
+        pass
+    unverified = ssl.create_default_context()
+    unverified.check_hostname = False
+    unverified.verify_mode = ssl.CERT_NONE
+    contexts.append(unverified)
+    return contexts
+
+
 def get_public_ip(timeout=4.0):
     # Ask a public service for this device's internet-facing IP. Returns the IP
     # as a string, or None if there is no internet or no service answered. This
     # makes one outbound request and reveals this device's IP to that service,
     # so it is only called when the user opens the Host screen. This is blocking,
     # so call it from a background thread.
+    contexts = _ssl_contexts()
     for url in PUBLIC_IP_SERVICES:
-        try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:
-                text = response.read().decode("utf-8").strip()
-        except Exception:
-            continue
-        parts = text.split(".")
-        if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
-            return text
+        for ctx in contexts:
+            try:
+                with urllib.request.urlopen(url, timeout=timeout,
+                                            context=ctx) as response:
+                    text = response.read().decode("utf-8").strip()
+            except Exception:
+                continue
+            parts = text.split(".")
+            if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255
+                                       for p in parts):
+                return text
     return None
 
 

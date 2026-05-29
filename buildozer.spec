@@ -21,7 +21,7 @@ source.include_exts = py,png,wav
 source.exclude_dirs = bin, dist, build, venv, .venv, .buildozer, .git, __pycache__, PlayerGA, audio_alternatives, tools, music/originals, sprite_preview, cointex_media
 
 # Version shown to users.
-version = 1.3
+version = 1.4
 
 # Packages the app needs. The release game only needs Kivy. The 2-player
 # networking uses the Python standard library, so nothing is added here.
@@ -64,7 +64,7 @@ android.release_artifact = aab
 # Version code. It must be higher than the version code already on Google Play,
 # or the upload is rejected. Check the current value in Play Console under
 # Release, App bundle explorer.
-android.numeric_version = 10300
+android.numeric_version = 10400
 
 # Background color of the splash screen.
 android.presplash_color = #000000

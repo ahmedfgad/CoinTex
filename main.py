@@ -848,6 +848,7 @@ class GameScreen(Screen):
             picker = self._toucher(coin, factor=0.7)
             if picker is None:
                 continue
+            self._coin_pop(coin)
             self.coins.remove(coin)
             coin.stop()
             if coin.parent:
@@ -858,6 +859,19 @@ class GameScreen(Screen):
             self._refresh_hud()
         if not self.coins and self.active:
             self._coins_cleared()
+
+    def _coin_pop(self, coin):
+        # Rising "+N" pop at the coin's position — coin-collect feedback in
+        # single-player AND multiplayer (host runs this; the client pops in
+        # _apply_coins when a coin disappears from the host's snapshot).
+        try:
+            px, py = self._px(coin)
+            fs = max(18.0, self.world.height * 0.05)
+            self.world.add_widget(graphics.FloatingText(
+                (px, py), "+{}".format(COIN_POINTS),
+                color=(1.0, 0.85, 0.25), font_size=fs))
+        except Exception:
+            pass
 
     def _coins_cleared(self):
         # The board is empty. What that means depends on the game type.
@@ -1216,6 +1230,10 @@ class GameScreen(Screen):
         keep = set(remaining)
         for coin in list(self.coins):
             if coin.index not in keep:
+                # A coin vanished from the host's snapshot → it was just
+                # collected; pop a "+N" at its position so the client sees
+                # the same feedback.
+                self._coin_pop(coin)
                 self.coins.remove(coin)
                 coin.stop()
                 if coin.parent:

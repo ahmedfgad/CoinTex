@@ -7,6 +7,7 @@ import math
 import random
 
 from kivy.uix.widget import Widget
+from kivy.uix.label import Label
 from kivy.properties import NumericProperty, ListProperty, BooleanProperty
 from kivy.graphics import Color, Ellipse, Rectangle, Line, Triangle
 from kivy.clock import Clock
@@ -378,6 +379,47 @@ class ParticleBurst(Widget):
             for p in self._parts:
                 Color(self.color[0], self.color[1], self.color[2], fade)
                 Ellipse(pos=(p[0] - p[4], p[1] - p[4]), size=(p[4] * 2, p[4] * 2))
+
+
+class FloatingText(Widget):
+    # A bold "+N" label that pops in, drifts up, and fades out — used as
+    # coin-collect feedback. Rides the same shared 30fps tick as everything
+    # else, and removes itself when done.
+    def __init__(self, center, text, color=(1.0, 0.85, 0.25),
+                 font_size=24.0, duration=1.0, rise=80.0, on_done=None, **kwargs):
+        super().__init__(**kwargs)
+        self._life = 0.0
+        self._dur = float(duration)
+        self._cx, self._cy = center
+        self._rise = float(rise)
+        self._base_fs = float(font_size)
+        self.on_done = on_done
+        self.label = Label(
+            text="[b]{}[/b]".format(text), markup=True, bold=True,
+            color=(color[0], color[1], color[2], 1.0),
+            font_size=self._base_fs, halign="center", valign="middle",
+            size_hint=(None, None), size=(200, 56),
+        )
+        self.label.bind(size=lambda l, *_: setattr(l, "text_size", l.size))
+        self.label.center = (self._cx, self._cy)
+        self.add_widget(self.label)
+        _register(self)
+
+    def _advance(self, dt):
+        self._life += dt
+        f = min(1.0, self._life / self._dur)
+        self.label.center = (self._cx, self._cy + self._rise * f)
+        # Quick scale-in pop over the first ~0.15s.
+        pop = 0.7 + 0.3 * min(1.0, self._life / 0.15)
+        self.label.font_size = self._base_fs * pop
+        # Hold, then fade over the back half.
+        self.label.opacity = 1.0 if f < 0.5 else max(0.0, 1.0 - (f - 0.5) / 0.5)
+        if self._life >= self._dur:
+            _unregister(self)
+            if self.parent:
+                self.parent.remove_widget(self)
+            if self.on_done:
+                self.on_done()
 
 
 class Background(Widget):

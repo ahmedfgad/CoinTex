@@ -314,21 +314,33 @@ def _basic_beat(beats):
 
 
 def build_menu():
-    bpm = 110.0
+    """Warm piano + flute melody — gentle, pretty, welcoming title theme."""
+    bpm = 84.0
     n = _bar_n(bpm)
     beats = n / SAMPLE_RATE / (60.0 / bpm)
-    # Upbeat I-V-vi-IV in C: chords over the whole loop, bouncy pluck melody.
-    chord_beats = [(0, 4, [60, 64, 67]), (4, 4, [67, 71, 74]),
-                   (8, 4, [57, 60, 64]), (12, 4, [53, 57, 60])]
-    chord_beats = [(b, d, m) for (b, d, m) in chord_beats if b < beats]
+    # Gentle C major I-vi-IV-V (C/Am/F/G), tiled across the loop
+    prog = [(0, 4, [60, 64, 67]), (4, 4, [57, 60, 64]),
+            (8, 4, [53, 57, 60]), (12, 4, [55, 59, 62])]
+    chord_beats = [(blk + b, d, m) for blk in range(0, int(beats), 16)
+                   for (b, d, m) in prog if blk + b < beats]
     pad = _layered_pad(n, bpm, chord_beats)
-    mel = [(0, 1, 72), (1, 0.5, 74), (1.5, 0.5, 76), (2, 1, 79), (3, 1, 76),
-           (4, 1, 79), (6, 2, 74), (8, 1, 72), (10, 2, 67), (12, 1, 72),
-           (13, 1, 74), (14, 2, 76)]
-    mel = [(b, d, m) for (b, d, m) in mel if b < beats]
-    lead = delay(seq(n, bpm, mel, _pluck_voice), 60.0 / bpm / 2, mix=0.2)
-    drums = _drum_track(n, bpm, _basic_beat(beats))
-    return normalize(mix(pad * 0.5, lead * 0.7, drums * 0.6), 0.9)
+    # Piano: gentle broken-chord comping, 24 notes spread over each 16-beat block
+    arp = [60, 64, 67, 72, 67, 64, 57, 60, 64, 69, 64, 60,
+           53, 57, 60, 65, 60, 57, 55, 59, 62, 67, 62, 59]
+    step = 16.0 / len(arp)
+    piano_notes = [(blk + i * step, step, m)
+                   for blk in range(0, int(beats), 16)
+                   for i, m in enumerate(arp) if blk + i * step < beats]
+    piano = seq(n, bpm, piano_notes, _piano_voice)
+    # Flute: slow lyrical melody on top, lightly echoed
+    fmotif = [(0, 2, 79), (2, 2, 76), (4, 2, 72), (6, 2, 74),
+              (8, 2, 77), (10, 2, 76), (12, 3, 72), (15, 1, 74)]
+    fmel = [(blk + b, d, m) for blk in range(0, int(beats), 16)
+            for (b, d, m) in fmotif if blk + b < beats]
+    flute = delay(seq(n, bpm, fmel, _flute_voice), 60.0 / bpm * 0.5,
+                  feedback=0.25, mix=0.2)
+    # Calm: no drums on the title theme.
+    return normalize(mix(pad * 0.4, piano * 0.6, flute * 0.6), 0.9)
 
 
 def build_world1():
@@ -389,63 +401,59 @@ def build_world2():
 
 
 def build_world3():
-    """Industrial — funky electro-groove, E minor pentatonic, filtered funk."""
-    bpm = 112.0
-    n = _bar_n(bpm)
-    beats = n / SAMPLE_RATE / (60.0 / bpm)
-    # E minor pentatonic: E G A B D -> 52 55 57 59 62 (and octaves)
-    pent = [52, 55, 57, 59, 62, 64, 67, 69]
-    # syncopated funk bass on the low pent notes
-    bass_notes = [(0, 0.5, 40), (0.75, 0.25, 40), (1.5, 0.5, 43), (2, 0.5, 40),
-                  (2.75, 0.25, 45), (3.5, 0.5, 38)]
-    bn = []
-    for bar in range(0, int(beats), 4):
-        for (b, d, m) in bass_notes:
-            bn.append((bar + b, d, m))
-    bn = [(b, d, m) for (b, d, m) in bn if b < beats]
-    bass = seq(n, bpm, bn, _bass_voice)
-    # plucky pentatonic riff
-    riff = [(0, 0.5, 64), (0.5, 0.5, 67), (1, 0.5, 69), (2, 0.5, 67),
-            (2.5, 0.5, 64), (3, 0.5, 62), (3.5, 0.5, 64)]
-    rn = []
-    for bar in range(0, int(beats), 4):
-        for (b, d, m) in riff:
-            rn.append((bar + b, d, m))
-    rn = [(b, d, m) for (b, d, m) in rn if b < beats]
-    lead = seq(n, bpm, rn, _pluck_voice)
-    pat = []
-    for b in range(int(beats)):
-        pat.append((b, "k"))
-        pat.append((b + 0.5, "h"))
-        pat.append((b + 0.25, "h"))
-    drums = _drum_track(n, bpm, pat)
-    return normalize(mix(bass * 0.65, lead * 0.55, drums * 0.5), 0.9)
-
-
-def build_world4():
-    """Snowfield — sparkly crystalline, E major, bell arp through delay."""
+    """Ocean — bright flowing aquatic: bubbly arp, soft pad, gentle sway."""
     bpm = 96.0
     n = _bar_n(bpm)
     beats = n / SAMPLE_RATE / (60.0 / bpm)
-    # E major pad: E B G#m C#m -> chords
-    chord_beats = [(0, 4, [64, 68, 71]), (4, 4, [59, 64, 68]),
-                   (8, 4, [61, 64, 68]), (12, 4, [57, 64, 68])]
-    chord_beats = [(b, d, m) for (b, d, m) in chord_beats if b < beats]
+    # Flowing G major: G  D  Em  C
+    prog = [(0, 4, [55, 59, 62]), (4, 4, [50, 57, 62]),
+            (8, 4, [52, 55, 59]), (12, 4, [48, 55, 60])]
+    chord_beats = [(blk + b, d, m) for blk in range(0, int(beats), 16)
+                   for (b, d, m) in prog if blk + b < beats]
     pad = _layered_pad(n, bpm, chord_beats)
-    # bell arpeggio (E major scale notes), 16th-ish sparkle
-    arp_seq = [76, 80, 83, 88, 83, 80, 71, 76]
-    arp = []
-    for bar in range(0, int(beats), 4):
-        for i, m in enumerate(arp_seq):
-            arp.append((bar + i * 0.5, 0.5, m))
-    arp = [(b, d, m) for (b, d, m) in arp if b < beats]
-    bells = delay(seq(n, bpm, arp, _bell_voice), 60.0 / bpm * 0.75,
-                  feedback=0.4, mix=0.35)
-    # sparse beat: kick on 1 and 3 only
+    # bubbly flowing 8th-note arpeggio, bell voice through delay
+    arp_seq = [67, 71, 74, 79, 74, 71, 62, 67]
+    arp = [(bar + i * 0.5, 0.5, m) for bar in range(0, int(beats), 4)
+           for i, m in enumerate(arp_seq) if bar + i * 0.5 < beats]
+    bubbles = delay(seq(n, bpm, arp, _bell_voice), 60.0 / bpm * 0.75,
+                    feedback=0.35, mix=0.4)
+    # gentle round bass on chord roots
+    roots = [43, 38, 40, 36]
+    bass = seq(n, bpm, [(b * 4, 4, roots[b]) for b in range(len(roots))
+                        if b * 4 < beats], _bass_voice)
+    # soft swaying beat: kick on 1/3, hats on off-beats
     pat = [(b, "k") for b in range(0, int(beats), 2)]
     pat += [(b + 0.5, "h") for b in range(int(beats))]
     drums = _drum_track(n, bpm, pat)
-    return normalize(mix(pad * 0.55, bells * 0.7, drums * 0.35), 0.9)
+    return normalize(mix(pad * 0.5, bubbles * 0.6, bass * 0.45, drums * 0.3), 0.9)
+
+
+def build_world4():
+    """Cavern — mysterious echoey: spacious pad, sparse melody through heavy delay."""
+    bpm = 88.0
+    n = _bar_n(bpm)
+    beats = n / SAMPLE_RATE / (60.0 / bpm)
+    # D natural minor mood: Dm  Bb  F  C
+    prog = [(0, 4, [50, 53, 57]), (4, 4, [46, 50, 53]),
+            (8, 4, [53, 57, 60]), (12, 4, [48, 52, 55])]
+    chord_beats = [(blk + b, d, m) for blk in range(0, int(beats), 16)
+                   for (b, d, m) in prog if blk + b < beats]
+    pad = _layered_pad(n, bpm, chord_beats)
+    # sparse mysterious melody (D minor), tri voice through heavy echo
+    mmotif = [(0, 1.5, 74), (2, 1, 72), (3.5, 0.5, 70), (5, 2, 69),
+              (8, 1.5, 77), (10, 1, 74), (12, 2, 70), (14.5, 1.5, 69)]
+    mel = [(blk + b, d, m) for blk in range(0, int(beats), 16)
+           for (b, d, m) in mmotif if blk + b < beats]
+    echoey = delay(seq(n, bpm, mel, _tri_voice), 60.0 / bpm * 0.75,
+                   feedback=0.5, mix=0.45)
+    # low drone bass on roots
+    roots = [38, 34, 41, 36]
+    bass = seq(n, bpm, [(b * 4, 4, roots[b]) for b in range(len(roots))
+                        if b * 4 < beats], _bass_voice)
+    # minimal heartbeat: kick on beat 1 of each bar only
+    pat = [(b, "k") for b in range(0, int(beats), 4)]
+    drums = _drum_track(n, bpm, pat)
+    return normalize(mix(pad * 0.55, echoey * 0.6, bass * 0.4, drums * 0.3), 0.9)
 
 
 def build_world5():

@@ -119,6 +119,7 @@ def test_all_tracks_structural():
 
 
 if __name__ == "__main__":
+    np.random.seed(0)
     test_note_freq()
     test_oscillators_shape_and_range()
     test_adsr_starts_and_ends_quiet()

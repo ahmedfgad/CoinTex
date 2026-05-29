@@ -257,6 +257,25 @@ def _tri_voice(f, n):
                                 sustain=0.5, release=0.1)
 
 
+def _piano_voice(f, n):
+    """Struck, decaying harmonic tone — warm piano-ish timbre."""
+    s = (osc_sine(f, n) + 0.5 * osc_sine(2 * f, n)
+         + 0.25 * osc_sine(3 * f, n) + 0.12 * osc_sine(4 * f, n))
+    env = adsr(n, attack=0.004, decay=0.6, sustain=0.0, release=0.2)
+    return (s / 1.87) * env   # 1.87 = approx peak of the harmonic sum
+
+
+def _flute_voice(f, n):
+    """Breathy near-sine with gentle vibrato — airy flute-ish timbre."""
+    t = _t(n)
+    vib = 1.0 + 0.006 * np.sin(2 * np.pi * 5.0 * t)        # ~5 Hz vibrato
+    tone = (np.sin(2 * np.pi * f * t * vib)
+            + 0.08 * np.sin(2 * np.pi * 2 * f * t * vib))
+    breath = lowpass(np.random.uniform(-1, 1, n), 3000.0) * 0.05
+    env = adsr(n, attack=0.06, decay=0.1, sustain=0.8, release=0.15)
+    return (tone / 1.08 + breath) * env
+
+
 def _drum_track(n, bpm, pattern):
     """pattern: list of (beat_offset, 'k'|'s'|'h'). Renders one-shots."""
     out = np.zeros(n)

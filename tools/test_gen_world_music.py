@@ -90,6 +90,22 @@ def test_write_and_read_wav(tmp_path="/tmp/gwm_test.wav"):
         assert w.getnframes() == g.SAMPLE_RATE
 
 
+def test_piano_and_flute_voices():
+    n = g.SAMPLE_RATE // 2   # 0.5 s note
+    f = g.note_freq(72)      # C5
+    for voice in (g._piano_voice, g._flute_voice):
+        buf = voice(f, n)
+        assert buf.shape == (n,), voice.__name__
+        assert np.all(np.isfinite(buf)), voice.__name__
+        assert np.max(np.abs(buf)) <= 1.0 + 1e-6, voice.__name__
+        assert np.max(np.abs(buf)) > 0.05, voice.__name__   # audible
+    # piano is struck/decaying: end quieter than the early body
+    p = g._piano_voice(f, n)
+    early = np.max(np.abs(p[:n // 5]))
+    late = np.max(np.abs(p[-n // 5:]))
+    assert late < early, "piano should decay"
+
+
 def test_all_tracks_structural():
     for key, builder in g.TRACKS.items():
         raw = builder()
@@ -112,5 +128,6 @@ if __name__ == "__main__":
     test_seq_places_notes_on_grid()
     test_crossfade_loop_is_seamless()
     test_write_and_read_wav()
+    test_piano_and_flute_voices()
     test_all_tracks_structural()
     print("PASS: all tests")

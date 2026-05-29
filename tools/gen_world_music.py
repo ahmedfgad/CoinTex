@@ -266,14 +266,18 @@ def _piano_voice(f, n):
 
 
 def _flute_voice(f, n):
-    """Breathy near-sine with gentle vibrato — airy flute-ish timbre."""
+    """Near-sine with gentle vibrato — clean, airy flute-ish timbre.
+
+    Note: no filtered-noise "breath" layer. An earlier version added a
+    lowpassed white-noise breath at 0.05 amplitude, but on the sustained menu
+    melody it read as a continuous background hiss conflicting with the music,
+    so it was removed (the vibrato alone gives the airy character)."""
     t = _t(n)
     vib = 1.0 + 0.006 * np.sin(2 * np.pi * 5.0 * t)        # ~5 Hz vibrato
     tone = (np.sin(2 * np.pi * f * t * vib)
             + 0.08 * np.sin(2 * np.pi * 2 * f * t * vib))
-    breath = lowpass(np.random.uniform(-1, 1, n), 3000.0) * 0.05
     env = adsr(n, attack=0.06, decay=0.1, sustain=0.8, release=0.15)
-    return (tone / 1.08 + breath) * env
+    return (tone / 1.08) * env
 
 
 def _drum_track(n, bpm, pattern):
@@ -444,8 +448,12 @@ def build_world4():
               (8, 1.5, 77), (10, 1, 74), (12, 2, 70), (14.5, 1.5, 69)]
     mel = [(blk + b, d, m) for blk in range(0, int(beats), 16)
            for (b, d, m) in mmotif if blk + b < beats]
+    # Restrained delay: heavy feedback/mix made echoes of this sparse,
+    # near-chromatic melody clash dissonantly with the next note (audible as
+    # "noise conflicting with the track"); 0.3/0.22 keeps the echo character
+    # without the clashing wash.
     echoey = delay(seq(n, bpm, mel, _tri_voice), 60.0 / bpm * 0.75,
-                   feedback=0.5, mix=0.45)
+                   feedback=0.3, mix=0.22)
     # low drone bass on roots
     roots = [38, 34, 41, 36]
     bass = seq(n, bpm, [(b * 4, 4, roots[b]) for b in range(len(roots))
@@ -499,8 +507,11 @@ def build_world6():
         for i, m in enumerate(arp_seq):
             arp.append((bar + i * 0.5, 0.5, m))
     arp = [(b, d, m) for (b, d, m) in arp if b < beats]
+    # Restrained delay: heavier feedback/mix made overlapping arp echoes
+    # (e.g. C#/D a semitone apart) clash into a noisy wash; 0.3/0.22 keeps the
+    # shimmer without the clash.
     shimmer = delay(seq(n, bpm, arp, _tri_voice), 60.0 / bpm * 0.75,
-                    feedback=0.45, mix=0.4)
+                    feedback=0.3, mix=0.22)
     # round bass on chord roots
     roots = [38, 33, 35, 31]
     bass = seq(n, bpm, [(b * 4, 4, roots[b]) for b in range(len(roots))

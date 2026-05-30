@@ -42,6 +42,26 @@ case "$(uname -s)" in
 esac
 echo "Building CoinTex for $OS"
 
+# Headless environments (CI runners, servers) can't open the GL window that Kivy
+# briefly creates while PyInstaller analyses the app, which aborts the build.
+# Handle it here so the same command works with a display and without one:
+#   - Linux with no display: run PyInstaller under xvfb when it is available.
+#   - Windows software/CI GL is GDI Generic 1.1; the ANGLE backend (bundled in
+#     the Windows Kivy wheel) gives GL ES 2.0 via DirectX. Harmless on a real
+#     GPU, and only affects this build-time import, not the packaged app.
+PYI_PREFIX=""
+if [[ "$OS" == "linux" && -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
+    if command -v xvfb-run >/dev/null 2>&1; then
+        echo "No display detected; running PyInstaller under xvfb."
+        PYI_PREFIX="xvfb-run -a"
+    else
+        echo "Warning: no display and xvfb-run not found; the Kivy import may fail." >&2
+    fi
+fi
+if [[ "$OS" == "windows" ]]; then
+    export KIVY_GL_BACKEND="${KIVY_GL_BACKEND:-angle_sdl2}"
+fi
+
 # Create the venv the first time, then make sure Kivy and PyInstaller are in it.
 if [[ ! -d "venv" ]]; then
     echo "Creating a virtual environment in ./venv"
@@ -65,7 +85,7 @@ MODE="--onefile"
 # CoinTex logo on the .exe in File Explorer and in the title bar (PyInstaller
 # converts the .png to .ico through Pillow, which Kivy already installs).
 echo "Running PyInstaller ($MODE)"
-"$PY" -m PyInstaller \
+$PYI_PREFIX "$PY" -m PyInstaller \
     --noconfirm --clean $MODE --windowed \
     --name CoinTex \
     --icon cointex_logo.png \

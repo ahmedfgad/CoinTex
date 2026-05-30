@@ -15,7 +15,7 @@
 # Developer account is only needed for the App Store, not for this build.
 #
 # Run it from the Actions tab with "Run workflow", or as part of a release
-# (release.yml) when a version tag like v1.3 is pushed.
+# (release.yml) when a version tag like v1.4 is pushed.
 
 name: Build iOS app
 
@@ -114,8 +114,8 @@ jobs:
           $PB -c "Set :CFBundleIdentifier coin.tex.cointexreactfast" "$PLIST"
           $PB -c "Set :CFBundleDisplayName CoinTex" "$PLIST" || $PB -c "Add :CFBundleDisplayName string CoinTex" "$PLIST"
           $PB -c "Set :CFBundleName CoinTex" "$PLIST" || true
-          $PB -c "Set :CFBundleShortVersionString 1.3" "$PLIST" || $PB -c "Add :CFBundleShortVersionString string 1.3" "$PLIST"
-          $PB -c "Set :CFBundleVersion 10300" "$PLIST" || $PB -c "Add :CFBundleVersion string 10300" "$PLIST"
+          $PB -c "Set :CFBundleShortVersionString 1.4" "$PLIST" || $PB -c "Add :CFBundleShortVersionString string 1.4" "$PLIST"
+          $PB -c "Set :CFBundleVersion 10400" "$PLIST" || $PB -c "Add :CFBundleVersion string 10400" "$PLIST"
           # The 2-player feature talks to a nearby device over the local network.
           $PB -c "Add :NSLocalNetworkUsageDescription string 'CoinTex uses the local network to play with a nearby device.'" "$PLIST" || true
           $PB -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true

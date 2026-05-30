@@ -26,7 +26,10 @@ concurrency:
 
 jobs:
   build-android:
-    runs-on: ubuntu-latest
+    # Pinned to 22.04: on ubuntu-24.04 the python-for-android libffi recipe fails
+    # in autogen.sh with "possibly undefined macro: LT_SYS_SYMBOL_USCORE" (newer
+    # autoconf/libtool). 22.04's toolchain builds the p4a recipes cleanly.
+    runs-on: ubuntu-22.04
     timeout-minutes: 120
 
     steps:
@@ -66,9 +69,9 @@ jobs:
           path: |
             ~/.buildozer
             .buildozer
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-buildozer-2204-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-
+            ${{ runner.os }}-buildozer-2204-
 
       # Equivalent to `./build_android.sh --debug --skip-deps`: a debug apk
       # needs no signing. Run buildozer directly so we don't drag in the local

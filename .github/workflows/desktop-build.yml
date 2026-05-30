@@ -70,7 +70,24 @@ jobs:
       # bash is available on all three runners (Git Bash on Windows).
       - name: Build the desktop binary
         shell: bash
-        run: ./build_desktop.sh
+        run: |
+          # PyInstaller imports Kivy while analysing the app, and importing
+          # kivy.core.window briefly creates a real GL context:
+          #   - Linux CI has no X display -> run under xvfb (Mesa llvmpipe gives
+          #     GL >= 2.0); without it the analysis subprocess dies on
+          #     "Couldn't connect to X server".
+          #   - Windows CI only exposes GDI Generic OpenGL 1.1, so Kivy aborts on
+          #     its GL-version check -> use the ANGLE backend (bundled in the
+          #     Windows Kivy wheel) for GL ES 2.0 via DirectX.
+          #   - macOS works as-is.
+          if [ "${{ matrix.label }}" = "linux" ]; then
+            xvfb-run -a ./build_desktop.sh
+          elif [ "${{ matrix.label }}" = "windows" ]; then
+            export KIVY_GL_BACKEND=angle_sdl2
+            ./build_desktop.sh
+          else
+            ./build_desktop.sh
+          fi
 
       # Linux: the onefile binary is ready to upload as-is. Boot it once from a
       # foreign working directory under xvfb to catch the packaged-asset-path

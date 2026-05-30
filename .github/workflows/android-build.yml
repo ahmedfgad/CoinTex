@@ -1,0 +1,92 @@
+# Builds the CoinTex Android package with Buildozer and uploads the .apk.
+#
+# This builds the DEBUG apk, which is unsigned. That is deliberate: it needs no
+# keystore and no secrets, so the workflow runs on a fork or a fresh clone with
+# nothing to configure. It is the same thing `./build_android.sh --debug` does
+# locally, reading the shared buildozer.spec, so a green local debug build
+# predicts a green CI build. The signed release .aab for Google Play is still
+# produced locally by `./build_android.sh` (it creates and uses a private
+# keystore that must never live in CI).
+#
+# Buildozer downloads the Android SDK/NDK on the first run (a few GB), so the
+# first build is slow; the .buildozer cache below makes later runs much faster.
+#
+# Triggers: "Run workflow" from the Actions tab, or called by release.yml on a
+# version tag.
+
+name: Build Android app
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # System packages python-for-android needs to compile the toolchain.
+      - name: Install Buildozer system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ccache git zip unzip \
+            autoconf automake libtool pkg-config cmake \
+            zlib1g-dev libncurses-dev libffi-dev libssl-dev
+
+      - name: Install Buildozer and Cython
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade buildozer cython
+
+      # Cache the SDK/NDK and p4a build dir. The key is tied to buildozer.spec
+      # so a change to the build config (e.g. android.api) busts the cache.
+      - name: Cache the Buildozer toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
+      # Equivalent to `./build_android.sh --debug --skip-deps`: a debug apk
+      # needs no signing. Run buildozer directly so we don't drag in the local
+      # script's venv/setup bootstrapping, which CI already handles above.
+      - name: Build the debug apk
+        run: buildozer android debug
+
+      - name: Locate the apk
+        id: apk
+        run: |
+          APK="$(ls -1 bin/*.apk 2>/dev/null | head -1)"
+          test -n "$APK" || { echo "no apk produced" >&2; ls -lR bin || true; exit 1; }
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Built $APK"
+
+      - name: Upload the apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoinTex-android
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30

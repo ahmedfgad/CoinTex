@@ -1,0 +1,125 @@
+# Builds the real PyInstaller desktop binaries for Linux, Windows and macOS and
+# uploads each as a downloadable artifact.
+#
+# This is the heavy counterpart to desktop-ci.yml: where that workflow only
+# boots the app under xvfb on every push, this one runs the actual packaging
+# (build_desktop.sh -> PyInstaller) on a runner of each OS, because PyInstaller
+# cannot cross-build. It is intentionally NOT run on every push — it is meant
+# for releases and on-demand checks:
+#
+#   - "Run workflow" from the Actions tab (workflow_dispatch), or
+#   - called by release.yml when a version tag like v1.0 is pushed.
+#
+# Each job produces one artifact:
+#   CoinTex-linux     the single-file Linux executable (dist/CoinTex)
+#   CoinTex-windows   the Windows executable (dist/CoinTex.exe)
+#   CoinTex-macos     the macOS .app bundle, zipped (dist/CoinTex.app)
+
+name: Build desktop apps
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: desktop-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux
+            runner: ubuntu-latest
+            artifact: CoinTex-linux
+          - label: windows
+            runner: windows-latest
+            artifact: CoinTex-windows
+          - label: macos
+            runner: macos-14
+            artifact: CoinTex-macos
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Only Linux needs SDL2 from the system: the Windows and macOS Kivy wheels
+      # bundle their own SDL2. PyInstaller imports Kivy while analysing the app,
+      # so these must be present for the build to succeed on Linux.
+      - name: Install SDL2 runtime libraries (Linux only)
+        if: matrix.label == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 \
+            libsdl2-ttf-2.0-0 libgl1-mesa-dri libgles2 libmtdev1
+
+      # build_desktop.sh detects the OS, makes a venv, installs requirements +
+      # PyInstaller and runs the packaging. Running it (rather than calling
+      # PyInstaller directly) keeps CI and local builds on the exact same path.
+      # bash is available on all three runners (Git Bash on Windows).
+      - name: Build the desktop binary
+        shell: bash
+        run: ./build_desktop.sh
+
+      # Linux: the onefile binary is ready to upload as-is. Boot it once from a
+      # foreign working directory under xvfb to catch the packaged-asset-path
+      # class of bugs that source-tree runs never hit.
+      - name: Smoke-test the Linux binary
+        if: matrix.label == 'linux'
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: |
+          BIN="$(pwd)/dist/CoinTex"
+          test -x "$BIN" || { echo "missing $BIN" >&2; exit 1; }
+          cd /tmp
+          xvfb-run -a timeout --preserve-status 8 "$BIN" || code=$?
+          # 124 = timeout fired (app stayed up). 143 = SIGTERM. 0 = clean exit.
+          if [ "${code:-0}" != "0" ] && [ "${code:-0}" != "124" ] && [ "${code:-0}" != "143" ]; then
+              echo "packaged binary exited $code from a foreign cwd" >&2
+              exit "$code"
+          fi
+          echo "Packaged-binary smoke test passed"
+
+      # macOS .app is a directory bundle with symlinks and executable bits that
+      # a plain zip can mangle. ditto preserves the bundle so it stays runnable.
+      - name: Zip the macOS .app
+        if: matrix.label == 'macos'
+        run: |
+          cd dist
+          ditto -c -k --keepParent CoinTex.app CoinTex-macos.zip
+          ls -lh CoinTex-macos.zip
+
+      - name: Upload the Linux binary
+        if: matrix.label == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/CoinTex
+          retention-days: 30
+
+      - name: Upload the Windows executable
+        if: matrix.label == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/CoinTex.exe
+          retention-days: 30
+
+      - name: Upload the macOS app
+        if: matrix.label == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/CoinTex-macos.zip
+          retention-days: 30

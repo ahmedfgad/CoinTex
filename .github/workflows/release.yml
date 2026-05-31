@@ -1,33 +1,26 @@
-# The combined release workflow: one tag, every platform, one place to download.
+# Build every platform for a release, in one run.
 #
-# Push a version tag like v1.0 and this builds CoinTex on all platforms by
-# calling the per-platform workflows, then gathers every artifact and attaches
-# them to a single GitHub Release for that tag.
+# This does NOT publish a GitHub Release or attach anything to one. It only
+# builds. Run it from the Actions tab ("Run workflow"); when the jobs finish,
+# download the per-platform files from the run's Artifacts section and attach
+# whichever you want to a release yourself.
 #
-#   git tag v1.0 && git push origin v1.0
-#
-# Each build workflow is reused via `uses:` so there is no duplicated build
-# logic, and each can still be run on its own from the Actions tab. Because the
-# per-platform workflows no longer trigger on tags themselves, nothing builds
-# twice.
-#
-# Artifacts published on the Release:
+# Artifacts produced by this run:
 #   CoinTex-linux            single-file Linux executable
-#   CoinTex-windows.exe      Windows executable
-#   CoinTex-macos.zip        macOS .app bundle (zipped)
-#   CoinTex-android.apk      debug apk (unsigned, for sideloading/testing)
-#   CoinTex-unsigned.ipa     unsigned iOS app (sideload with AltStore/Sideloadly)
-#   CoinTex-xcode-project.zip the Xcode project for an App Store upload
+#   CoinTex-windows          Windows executable
+#   CoinTex-macos            macOS .app bundle (zipped)
+#   CoinTex-android          debug apk (unsigned, for sideloading/testing)
+#   CoinTex-unsigned-ipa     unsigned iOS app (sideload with AltStore/Sideloadly)
+#   CoinTex-xcode-project    the Xcode project for an App Store upload
 #
-# The signed Google Play .aab is intentionally NOT built here — it needs the
-# private keystore and is produced locally with ./build_android.sh.
+# Each build workflow is reused via `uses:` and can also be run on its own from
+# the Actions tab. The signed Google Play .aab is produced locally with
+# ./build_android.sh, not here.
 
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -42,51 +35,3 @@ jobs:
 
   ios:
     uses: ./.github/workflows/ios-build.yml
-
-  publish:
-    name: Publish the GitHub Release
-    needs: [desktop, android, ios]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      # Pull down every artifact produced by the build jobs above. Each lands
-      # in its own subfolder named after the artifact.
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      # Flatten and give the files release-friendly names with their platform
-      # and extension, so a visitor can tell them apart at a glance.
-      - name: Stage the release files
-        run: |
-          mkdir -p release
-          cp "artifacts/CoinTex-linux/CoinTex"                   "release/CoinTex-linux"
-          cp "artifacts/CoinTex-windows/CoinTex.exe"             "release/CoinTex-windows.exe"
-          cp "artifacts/CoinTex-macos/CoinTex-macos.zip"         "release/CoinTex-macos.zip"
-          cp artifacts/CoinTex-android/*.apk                     "release/CoinTex-android.apk"
-          cp "artifacts/CoinTex-unsigned-ipa/CoinTex-unsigned.ipa" "release/CoinTex-unsigned.ipa"
-          cp "artifacts/CoinTex-xcode-project/CoinTex-xcode-project.zip" "release/CoinTex-xcode-project.zip"
-          echo "Release files:"
-          ls -lh release
-
-      - name: Create the GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release/*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          body: |
-            CoinTex ${{ github.ref_name }}
-
-            Downloads below, one per platform:
-
-            - **Windows** — `CoinTex-windows.exe`
-            - **macOS** — `CoinTex-macos.zip` (unzip and open CoinTex.app)
-            - **Linux** — `CoinTex-linux` (`chmod +x` then run)
-            - **Android** — `CoinTex-android.apk` (unsigned debug build; enable "install unknown apps")
-            - **iPhone** — `CoinTex-unsigned.ipa` (sideload with AltStore or Sideloadly — see IOS_INSTALL.md), or `CoinTex-xcode-project.zip` to build in Xcode
-
-            The signed Google Play `.aab` is built separately with `./build_android.sh`.

@@ -1,0 +1,3 @@
+file '/home/ahmed-gad/projects/CoinTex/cointex_media/.vilvik_build/intro.mp4'
+file '/home/ahmed-gad/projects/CoinTex/cointex_media/.vilvik_build/source60.mp4'
+file '/home/ahmed-gad/projects/CoinTex/cointex_media/.vilvik_build/outro.mp4'

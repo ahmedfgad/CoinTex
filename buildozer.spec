@@ -20,8 +20,8 @@ source.include_exts = py,png,wav
 # version (needs pygad and numpy). audio_alternatives and tools are dev only.
 source.exclude_dirs = bin, dist, build, venv, .venv, .buildozer, .git, __pycache__, PlayerGA, audio_alternatives, tools, music/originals, sprite_preview, cointex_media
 
-# Version shown to users.
-version = 1.4
+# Version shown to users. This patch release updates the Android target SDK.
+version = 1.4.1
 
 # Packages the app needs. The release game only needs Kivy. The 2-player
 # networking uses the Python standard library, so nothing is added here.
@@ -45,11 +45,15 @@ fullscreen = 1
 
 # Android settings
 
-# Target Android version. Google Play requires updates to target API 35.
-android.api = 35
+# Target Android 16. Google Play requires updates to target API 36 from
+# August 30, 2026.
+android.api = 36
 
 # Lowest Android version the app runs on. python-for-android needs 21 or higher.
 android.minapi = 21
+
+# NDK recommended by the pinned python-for-android release below.
+android.ndk = 28c
 
 # Build for 64-bit and 32-bit. Google Play requires the 64-bit arm64-v8a.
 android.archs = arm64-v8a, armeabi-v7a
@@ -64,13 +68,20 @@ android.release_artifact = aab
 # Version code. It must be higher than the version code already on Google Play,
 # or the upload is rejected. Check the current value in Play Console under
 # Release, App bundle explorer.
-android.numeric_version = 10400
+android.numeric_version = 10401
 
 # Background color of the splash screen.
 android.presplash_color = #000000
 
 # Release signing is passed in by build_android.sh through the P4A_RELEASE_KEYSTORE
 # environment variables, so no keystore is written here.
+
+# Pin the python-for-android release that includes Android Gradle Plugin 8.11,
+# Gradle 8.14.3 and NDK 28c support. Those versions can compile/target API 36.
+# The release commit lives on the develop branch; pinning the commit prevents a
+# later develop-branch change from silently changing the release toolchain.
+p4a.branch = develop
+p4a.commit = 58d21141f17c889bf8585f5665921d72028f8831
 
 
 [buildozer]

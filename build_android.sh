@@ -3,7 +3,7 @@
 # Builds the CoinTex Android package, ready to upload to Google Play.
 #
 # What it does:
-#   1. Activates the venv and makes sure buildozer and Cython are installed.
+#   1. Activates the venv and installs the pinned Android packaging tools.
 #   2. Checks that the Android build tools are present (installed by setup_venv.sh).
 #   3. Creates a release upload key the first time, and exports its certificate.
 #   4. Builds the signed release files in ./bin (an .aab for Google Play and an
@@ -44,7 +44,7 @@ if [[ ! -d "$VENV_DIR" ]]; then
 fi
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
-python -m pip install --upgrade buildozer cython
+python -m pip install --upgrade -r requirements-android.txt
 
 # Check the Android build tools. setup_venv.sh installs them.
 if [[ "$SKIP_DEPS" -eq 0 ]]; then

@@ -6,7 +6,7 @@
 #   1. Creates a Python 3.12 virtual environment in ./venv and installs Kivy.
 #   2. Installs the Linux libraries Kivy needs to run (SDL2, OpenGL, xvfb).
 #   3. Installs the Android build tools (JDK 17, autotools, cmake and so on).
-#   4. Installs buildozer and Cython in the venv.
+#   4. Installs the pinned Android packaging tools in the venv.
 #
 # Steps 2-4 use apt and ask for your sudo password.
 #
@@ -111,8 +111,8 @@ else
     sudo apt-get install -y $PKGS "${ZLIB_ARGS[@]}"
 
     if [[ "$INSTALL_ANDROID" -eq 1 ]]; then
-        echo "Installing buildozer and Cython in the venv"
-        python -m pip install --upgrade buildozer cython
+        echo "Installing Android packaging tools in the venv"
+        python -m pip install --upgrade -r requirements-android.txt
     fi
 fi
 

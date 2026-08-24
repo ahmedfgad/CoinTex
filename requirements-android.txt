@@ -1,0 +1,4 @@
+# Android packaging tools. Keep these pinned so local and CI builds use the
+# same Buildozer frontend. python-for-android itself is pinned in buildozer.spec.
+buildozer==1.6.0
+Cython==0.29.34

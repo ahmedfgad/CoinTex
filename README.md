@@ -146,7 +146,7 @@ If you run the game on a machine with no audio output, such as some virtual mach
 
 ### Android
 
-The Android app is built with [Buildozer](https://github.com/kivy/buildozer) using the settings in `buildozer.spec`. The helper script builds the signed release files:
+The Android app is built with [Buildozer](https://github.com/kivy/buildozer) using the settings in `buildozer.spec`. It targets Android 16 (API level 36), and its Android packaging tools are pinned in `requirements-android.txt`. The helper script builds the signed release files:
 
 ```
 ./build_android.sh

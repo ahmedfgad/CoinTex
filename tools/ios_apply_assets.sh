@@ -74,6 +74,15 @@ icons = [
     ("iphone", "40x40", "3x", 120, "icon-40@3x.png"),
     ("iphone", "60x60", "2x", 120, "icon-60@2x.png"),
     ("iphone", "60x60", "3x", 180, "icon-60@3x.png"),
+    ("ipad", "20x20", "1x", 20, "icon-ipad-20.png"),
+    ("ipad", "20x20", "2x", 40, "icon-ipad-20@2x.png"),
+    ("ipad", "29x29", "1x", 29, "icon-ipad-29.png"),
+    ("ipad", "29x29", "2x", 58, "icon-ipad-29@2x.png"),
+    ("ipad", "40x40", "1x", 40, "icon-ipad-40.png"),
+    ("ipad", "40x40", "2x", 80, "icon-ipad-40@2x.png"),
+    ("ipad", "76x76", "1x", 76, "icon-ipad-76.png"),
+    ("ipad", "76x76", "2x", 152, "icon-ipad-76@2x.png"),
+    ("ipad", "83.5x83.5", "2x", 167, "icon-ipad-83.5@2x.png"),
     ("ios-marketing", "1024x1024", "1x", 1024, "icon-1024.png"),
 ]
 

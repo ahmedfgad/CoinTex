@@ -60,6 +60,14 @@ def main() -> None:
         fail("iPhone orientations must be landscape-only")
     if set(info.get("UISupportedInterfaceOrientations~ipad", [])) != landscape:
         fail("iPad orientations must be landscape-only")
+    ipad_icon_files = set(
+        info.get("CFBundleIcons~ipad", {})
+        .get("CFBundlePrimaryIcon", {})
+        .get("CFBundleIconFiles", [])
+    )
+    required_ipad_icons = {"AppIcon76x76", "AppIcon83.5x83.5"}
+    if not required_ipad_icons.issubset(ipad_icon_files):
+        fail("compiled iPad app icons are missing")
     if info.get("ITSAppUsesNonExemptEncryption") is not False:
         fail("ITSAppUsesNonExemptEncryption must be false")
     if not info.get("NSLocalNetworkUsageDescription"):

@@ -157,6 +157,9 @@ The Android app is built with [Buildozer](https://github.com/kivy/buildozer) usi
 
 It produces an `.aab` for Google Play and an `.apk` for testing in the `bin` folder. Both are checked for the required ABIs and 16 KB alignment of every 64-bit native library; the APK is also checked for target API 36. Signing the release is described in [SIGNING.md](SIGNING.md).
 
+The current Google Play copy and the prepared Apple product-page metadata are
+recorded together in [STORE_METADATA.md](STORE_METADATA.md).
+
 ### iPhone, iPad and the App Store
 
 iOS apps must be built with Xcode on macOS. You do not need to own a Mac: the GitHub Actions workflow at `.github/workflows/ios-build.yml` uses a macOS runner to create a validated unsigned test IPA and portable Xcode project. The separate protected workflow at `.github/workflows/ios-app-store.yml` creates the signed App Store archive only after Apple credentials are configured. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md) for builds and [APP_STORE_SUBMISSION.md](APP_STORE_SUBMISSION.md) for publishing.
@@ -190,6 +193,7 @@ If the built program shows a black window on a machine with no working sound out
 | `tools/` | Scripts that generate the sounds and render the sprite preview. |
 | `ios/` | App Store identity, release settings and privacy manifest. |
 | `app_store/` | Prepared App Store metadata and iPhone/iPad screenshots. |
+| `STORE_METADATA.md` | Cross-store Google Play and App Store listing reference. |
 | `android/` | Extra Android 16 manifest application attributes. |
 | `tests/` | Save, networking and Android artifact regression tests. |
 | `PlayerGA/` | The research version of the player that searches with PyGAD. |

@@ -92,8 +92,9 @@ ad-hoc profile, belongs to the configured Team ID, and matches the bundle ID.
 
 ## 4. Complete the product page
 
-Copy the prepared English metadata and screenshots from `app_store/`. Suggested
-App Store choices are:
+Copy the prepared English metadata and screenshots from `app_store/`. The
+cross-store reference and copy-ready values are summarized in
+[`STORE_METADATA.md`](STORE_METADATA.md). Suggested App Store choices are:
 
 - Primary category: **Games**; subcategory: **Action**. A reasonable secondary
   category is **Casual**.

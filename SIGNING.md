@@ -1,5 +1,8 @@
 # Android signing notes
 
+This document covers Android signing. Apple signing uses unrelated Apple
+certificates and provisioning profiles; see [APP_STORE_SUBMISSION.md](APP_STORE_SUBMISSION.md).
+
 CoinTex (`coin.tex.cointexreactfast`) was published a long time ago and the
 original signing key is lost. Whether the existing app on Google Play can still
 be updated depends on one setting in the Play Console. This file explains how to

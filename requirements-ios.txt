@@ -1,0 +1,12 @@
+# Host-side iOS packaging toolchain. These versions match the latest stable
+# kivy-ios release and its own build CI rather than following moving latest
+# versions on every release build.
+kivy-ios==2025.5.17
+Cython==0.29.36
+pbxproj==3.5.0
+cookiecutter==2.1.1
+sh==1.12.14
+
+# Installed into the packaged Python distribution with `toolchain pip`; this
+# pin is also read by the local and GitHub Actions build scripts.
+certifi==2026.7.22

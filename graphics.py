@@ -372,6 +372,11 @@ class ParticleBurst(Widget):
             if self.on_done:
                 self.on_done()
 
+    def stop(self):
+        _unregister(self)
+        if self.parent:
+            self.parent.remove_widget(self)
+
     def _redraw(self):
         fade = max(0.0, 1.0 - self._life / self._max_life)
         self.canvas.clear()
@@ -420,6 +425,11 @@ class FloatingText(Widget):
                 self.parent.remove_widget(self)
             if self.on_done:
                 self.on_done()
+
+    def stop(self):
+        _unregister(self)
+        if self.parent:
+            self.parent.remove_widget(self)
 
 
 class Background(Widget):

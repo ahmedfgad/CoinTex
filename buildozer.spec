@@ -18,17 +18,25 @@ source.include_exts = py,png,wav
 
 # Folders to leave out of the package. PlayerGA is the old genetic algorithm
 # version (needs pygad and numpy). audio_alternatives and tools are dev only.
-source.exclude_dirs = bin, dist, build, venv, .venv, .buildozer, .git, __pycache__, PlayerGA, audio_alternatives, tools, music/originals, sprite_preview, cointex_media
+source.exclude_dirs = bin, dist, build, venv, .venv, .buildozer, .git, __pycache__, tests, PlayerGA, audio_alternatives, tools, music/originals, sprite_preview, cointex_media, app_store, ios, android
 
 # Version shown to users. This patch release updates the Android target SDK.
 version = 1.4.1
 
-# Packages the app needs. The release game only needs Kivy. The 2-player
-# networking uses the Python standard library, so nothing is added here.
-requirements = python3,kivy
+# Networking uses the standard library. certifi supplies a verified CA bundle
+# for the optional public-IP HTTPS lookup on mobile.
+requirements = python3,kivy,certifi==2026.7.22
 
 # The 2-player feature opens a network connection between the two devices.
 android.permissions = INTERNET
+
+# Progress is intentionally local and is not copied into Android cloud backups.
+android.allow_backup = False
+
+# Mark CoinTex as a game (so Android preserves its landscape game experience on
+# large screens) and retain Kivy's legacy Back callback on API 36. Android 17
+# removes this temporary Back opt-out, so revisit it before targeting API 37.
+android.extra_manifest_application_arguments = android/manifest_application_attributes.xml
 
 # Splash image shown while the app starts.
 presplash.filename = %(source.dir)s/cointex_presplash.png
@@ -46,7 +54,7 @@ fullscreen = 1
 # Android settings
 
 # Target Android 16. Google Play requires updates to target API 36 from
-# August 30, 2026.
+# August 31, 2026.
 android.api = 36
 
 # Lowest Android version the app runs on. python-for-android needs 21 or higher.
@@ -78,9 +86,9 @@ android.presplash_color = #000000
 
 # Pin the python-for-android release that includes Android Gradle Plugin 8.11,
 # Gradle 8.14.3 and NDK 28c support. Those versions can compile/target API 36.
-# The release commit lives on the develop branch; pinning the commit prevents a
-# later develop-branch change from silently changing the release toolchain.
-p4a.branch = develop
+# The v2026.05.09 release commit lives on the master branch; pinning the commit
+# prevents a later branch change from silently changing the release toolchain.
+p4a.branch = master
 p4a.commit = 58d21141f17c889bf8585f5665921d72028f8831
 
 

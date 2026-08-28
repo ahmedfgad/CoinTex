@@ -14,6 +14,8 @@
 # normal loop, on the main thread, which is the same approach autoplay.py uses.
 
 import json
+import ipaddress
+import math
 import socket
 import struct
 import threading
@@ -34,8 +36,40 @@ _HEADER = struct.Struct(">I")   # 4-byte big-endian length prefix
 
 def pack_message(obj):
     # Turn a Python object into a length-prefixed JSON frame ready to send.
-    data = json.dumps(obj).encode("utf-8")
+    if not isinstance(obj, dict):
+        raise TypeError("network messages must be JSON objects")
+    data = json.dumps(obj, allow_nan=False, separators=(",", ":")).encode("utf-8")
+    if not data or len(data) > MAX_FRAME:
+        raise ValueError("network message is too large")
     return _HEADER.pack(len(data)) + data
+
+
+def bounded_float(value, fallback, low=0.0, high=1.0):
+    """Parse an untrusted number and clamp it without accepting NaN/Infinity."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return fallback
+    if not math.isfinite(number):
+        return fallback
+    return min(max(number, low), high)
+
+
+def _safe_json_value(value, depth=0):
+    # Keep hostile peers from feeding non-finite coordinates or pathologically
+    # deep JSON into the main-thread game loop.
+    if depth > 24:
+        return False
+    if value is None or isinstance(value, (str, bool, int)):
+        return True
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, list):
+        return all(_safe_json_value(item, depth + 1) for item in value)
+    if isinstance(value, dict):
+        return all(isinstance(key, str) and _safe_json_value(item, depth + 1)
+                   for key, item in value.items())
+    return False
 
 
 def get_local_ip():
@@ -56,40 +90,19 @@ def get_local_ip():
 
 # Services that report back the caller's internet-facing IP address. Used only
 # to help set up internet play (the host needs to share this address).
-PUBLIC_IP_SERVICES = ("https://api.ipify.org", "https://ifconfig.me/ip",
-                      "http://icanhazip.com")
+PUBLIC_IP_SERVICES = ("https://api.ipify.org",)
 
 
-def _ssl_contexts():
-    # SSL contexts to try for the HTTPS lookups, most-trusted first.
+def _ssl_context():
+    # Mobile apps package certifi; desktop Python can use its system trust store.
     #
-    # Desktop Python finds the system CA bundle, so the default verified context
-    # works. The Python shipped inside the iOS / Android builds has no CA bundle,
-    # so certificate verification raises SSLCertVerificationError and every HTTPS
-    # request fails there (which is why the public IP never showed up on mobile,
-    # while the socket-based local IP did). The unverified context is the fallback
-    # that makes the lookup work on mobile. We only read back our *own* IP and
-    # send no secrets, so doing that single request without verification is an
-    # acceptable trade-off. certifi is used automatically if it happens to be
-    # installed, but it is not required.
     if ssl is None:
-        # No ssl module at all — let urllib use its own default handling.
-        return [None]
-    contexts = []
+        return None
     try:
         import certifi
-        contexts.append(ssl.create_default_context(cafile=certifi.where()))
+        return ssl.create_default_context(cafile=certifi.where())
     except Exception:
-        pass
-    try:
-        contexts.append(ssl.create_default_context())
-    except Exception:
-        pass
-    unverified = ssl.create_default_context()
-    unverified.check_hostname = False
-    unverified.verify_mode = ssl.CERT_NONE
-    contexts.append(unverified)
-    return contexts
+        return ssl.create_default_context()
 
 
 def get_public_ip(timeout=4.0):
@@ -98,19 +111,20 @@ def get_public_ip(timeout=4.0):
     # makes one outbound request and reveals this device's IP to that service,
     # so it is only called when the user opens the Host screen. This is blocking,
     # so call it from a background thread.
-    contexts = _ssl_contexts()
+    context = _ssl_context()
     for url in PUBLIC_IP_SERVICES:
-        for ctx in contexts:
-            try:
-                with urllib.request.urlopen(url, timeout=timeout,
-                                            context=ctx) as response:
-                    text = response.read().decode("utf-8").strip()
-            except Exception:
-                continue
-            parts = text.split(".")
-            if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255
-                                       for p in parts):
-                return text
+        try:
+            with urllib.request.urlopen(url, timeout=timeout,
+                                        context=context) as response:
+                text = response.read().decode("utf-8").strip()
+        except Exception:
+            continue
+        try:
+            address = ipaddress.ip_address(text)
+        except ValueError:
+            continue
+        if address.version == 4:
+            return str(address)
     return None
 
 
@@ -143,7 +157,7 @@ def _recv_loop(sock, inbox, on_closed):
                         break
                     need = _HEADER.unpack(bytes(buffer[:_HEADER.size]))[0]
                     del buffer[:_HEADER.size]
-                    if need > MAX_FRAME:
+                    if need <= 0 or need > MAX_FRAME:
                         raise ValueError("frame too large")
                 if len(buffer) < need:
                     break
@@ -151,7 +165,9 @@ def _recv_loop(sock, inbox, on_closed):
                 del buffer[:need]
                 need = None
                 try:
-                    inbox.put(json.loads(payload.decode("utf-8")))
+                    decoded = json.loads(payload.decode("utf-8"))
+                    if isinstance(decoded, dict) and _safe_json_value(decoded):
+                        inbox.put(decoded)
                 except Exception:
                     # Skip a single bad message rather than dropping the link.
                     continue

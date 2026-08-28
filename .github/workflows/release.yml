@@ -11,11 +11,13 @@
 #   CoinTex-macos            macOS .app bundle (zipped)
 #   CoinTex-android          debug apk (unsigned, for sideloading/testing)
 #   CoinTex-unsigned-ipa     unsigned iOS app (sideload with AltStore/Sideloadly)
-#   CoinTex-xcode-project    the Xcode project for an App Store upload
+#   CoinTex-xcode-project    portable App Store-configured Xcode project
 #
 # Each build workflow is reused via `uses:` and can also be run on its own from
 # the Actions tab. The signed Google Play .aab is produced locally with
 # ./build_android.sh, not here.
+# The signed iPhone IPA is intentionally isolated in ios-app-store.yml, which
+# requires a protected environment and Apple distribution credentials.
 
 name: Release
 

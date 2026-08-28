@@ -1,0 +1,2 @@
+# Used by build_android.sh and inherited by python-for-android's packaging venv.
+pip==25.3

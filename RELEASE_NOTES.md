@@ -2,12 +2,20 @@
 
 CoinTex is a top-down arcade game written entirely in Python with [Kivy](https://kivy.org). Move your character around each level to collect all the coins before the timer runs out, while dodging monsters and fire and shooting your way through. The same Python codebase runs on Windows, macOS, Linux, Android and iPhone, and every screen and all of the graphics are drawn in code.
 
-This patch release updates the Android packaging configuration for Google Play's Android 16 requirement. The game itself is unchanged from 1.4.
+This patch release updates the Android packaging configuration for Google Play's Android 16 requirement, prepares the iPhone App Store release path, and includes a cross-platform usability and reliability pass.
 
 ## What's new in 1.4.1
 
 - Android now targets Android 16 (API level 36) for Google Play update compliance.
-- The Buildozer/python-for-android toolchain is pinned to versions that support API 36 builds.
+- The Buildozer/python-for-android toolchain is pinned to API 36-capable releases with NDK r28c, and generated artifacts are checked for target SDK, ABIs, and 16 KB native-library alignment.
+- Android now declares the game category, preserves Kivy's Back handling on API 36, and keeps progress out of Android cloud backups.
+- The gameplay HUD has higher-contrast text panels, clearer Pause/Leave controls, safe margins for notches and gesture areas, and player spawns that stay clear of the lower controls.
+- Desktop and Apple-silicon Mac users can move with WASD/arrow keys and fire with Space; Android Back and desktop Escape now navigate safely.
+- Backgrounding pauses single-player without consuming the timer or health. Multiplayer closes cleanly rather than leaving a stalled peer connection.
+- Save loading now recovers safely from truncated or malformed values, and peer messages/coordinates are bounded before reaching the game loop.
+- Settings show an exact volume percentage and confirm when campaign progress has been reset.
+- The Auto Player sends movement changes through Kivy's main thread, and transient visual effects are cleaned up between levels.
+- An App Store-ready iPhone project path now includes current Xcode/iOS SDK checks, metadata, screenshots, privacy declarations, protected signing automation, and local archive validation.
 
 ## What's new in 1.4
 
@@ -32,12 +40,14 @@ This patch release updates the Android packaging configuration for Google Play's
 
 ## Downloads
 
-- Android: on [Google Play](https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast). That is the official signed release. You can also sideload `CoinTex-android.apk` below, an unsigned debug build; turn on "install unknown apps" first.
+- Android: on [Google Play](https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast). You can also sideload the production-signed `CoinTex-android.apk` below; turn on "install unknown apps" first. Android only accepts it as an update when the installed copy uses the same signing certificate.
 - Windows (`CoinTex-windows.exe`): download and run. SmartScreen may warn on an unsigned app; choose "More info" then "Run anyway".
 - macOS (`CoinTex-macos.zip`): unzip and open CoinTex.app. On first launch, right-click the app and choose Open to get past Gatekeeper.
 - Linux (`CoinTex-linux`): run `chmod +x CoinTex-linux`, then start it. It is a single self-contained file.
 - iPhone (`CoinTex-unsigned.ipa`): sideload with [AltStore](https://altstore.io) or Sideloadly, which re-sign it with your own Apple ID. See IOS_INSTALL.md.
-- iPhone, Xcode (`CoinTex-xcode-project.zip`): open the project on a Mac, set your team, Archive, and run on your device or upload to the App Store.
+- iPhone, Xcode (`CoinTex-xcode-project.zip`): a portable, App Store-configured project. Open it on a Mac, select your team, and test it on a real iPhone.
+
+The official Apple App Store release is being prepared separately. It requires the Apple Developer account, private distribution credentials, TestFlight testing, and App Review; the signed IPA is never attached to a normal public build by default.
 
 The signed Google Play `.aab` is not attached here. It needs the private upload keystore and is built separately with `./build_android.sh`.
 
@@ -66,7 +76,7 @@ On a machine with no audio output, start with `SDL_AUDIODRIVER=dummy python main
 
 ## Notes
 
-- The Android `.apk` and iOS `.ipa` attached here are unsigned on purpose, so they can be built without a developer account. For the official store-signed Android app, use Google Play.
+- The Android `.apk` is signed with the current CoinTex release key; debug builds are not published. The iOS `.ipa` is unsigned, so it contains no Apple signing credentials.
 - Every artifact is reproducible: `./build_desktop.sh` for Windows, macOS and Linux; `./build_android.sh` for a signed Android release; and the iOS GitHub Actions workflow.
 
 A Python and Kivy game by Ahmed Gad.

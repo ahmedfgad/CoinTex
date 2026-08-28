@@ -13,7 +13,8 @@
 # Usage:
 #   tools/ios_apply_assets.sh <project-dir> <logo.png> <presplash.png>
 #
-# Requires `sips` (built into macOS) to resize the icon.
+# Requires `sips` (built into macOS) for launch-image dimensions and Pillow
+# (installed with kivy-ios) for an opaque App Store icon catalog.
 
 set -euo pipefail
 
@@ -46,25 +47,52 @@ PH=$(sips -g pixelHeight "$PRESPLASH" | awk '/pixelHeight/ {print $2}')
 #    falls back to icon.png, which is now the presplash and not square).
 APPICON=$(find "$PROJ_DIR" -type d -name AppIcon.appiconset | head -1)
 if [ -n "$APPICON" ]; then
-    sips -z 58  58   "$LOGO" --out "$APPICON/icon-29@2x.png" >/dev/null
-    sips -z 87  87   "$LOGO" --out "$APPICON/icon-29@3x.png" >/dev/null
-    sips -z 80  80   "$LOGO" --out "$APPICON/icon-40@2x.png" >/dev/null
-    sips -z 120 120  "$LOGO" --out "$APPICON/icon-40@3x.png" >/dev/null
-    sips -z 120 120  "$LOGO" --out "$APPICON/icon-60@2x.png" >/dev/null
-    sips -z 180 180  "$LOGO" --out "$APPICON/icon-60@3x.png" >/dev/null
-    cat > "$APPICON/Contents.json" <<'JSON'
-{
-  "images" : [
-    {"idiom":"iphone","size":"29x29","scale":"2x","filename":"icon-29@2x.png"},
-    {"idiom":"iphone","size":"29x29","scale":"3x","filename":"icon-29@3x.png"},
-    {"idiom":"iphone","size":"40x40","scale":"2x","filename":"icon-40@2x.png"},
-    {"idiom":"iphone","size":"40x40","scale":"3x","filename":"icon-40@3x.png"},
-    {"idiom":"iphone","size":"60x60","scale":"2x","filename":"icon-60@2x.png"},
-    {"idiom":"iphone","size":"60x60","scale":"3x","filename":"icon-60@3x.png"}
-  ],
-  "info" : { "version" : 1, "author" : "xcode" }
-}
-JSON
+    python3 - "$LOGO" "$APPICON" <<'PY'
+import json
+import os
+import sys
+
+from PIL import Image
+
+source, destination = sys.argv[1:]
+logo = Image.open(source).convert("RGBA")
+if logo.width != logo.height or logo.width < 512:
+    raise SystemExit("iOS icon source must be square and at least 512x512")
+
+# Apple rejects the 1024px marketing icon if the PNG contains an alpha channel,
+# even when every pixel is opaque. Flatten every output to RGB.
+background = Image.new("RGBA", logo.size, (35, 75, 155, 255))
+logo = Image.alpha_composite(background, logo).convert("RGB")
+resampling = getattr(Image, "Resampling", Image).LANCZOS
+
+icons = [
+    ("iphone", "20x20", "2x", 40, "icon-20@2x.png"),
+    ("iphone", "20x20", "3x", 60, "icon-20@3x.png"),
+    ("iphone", "29x29", "2x", 58, "icon-29@2x.png"),
+    ("iphone", "29x29", "3x", 87, "icon-29@3x.png"),
+    ("iphone", "40x40", "2x", 80, "icon-40@2x.png"),
+    ("iphone", "40x40", "3x", 120, "icon-40@3x.png"),
+    ("iphone", "60x60", "2x", 120, "icon-60@2x.png"),
+    ("iphone", "60x60", "3x", 180, "icon-60@3x.png"),
+    ("ios-marketing", "1024x1024", "1x", 1024, "icon-1024.png"),
+]
+
+images = []
+for idiom, points, scale, pixels, filename in icons:
+    output = logo.resize((pixels, pixels), resampling)
+    output.save(os.path.join(destination, filename), "PNG", optimize=True)
+    images.append({
+        "idiom": idiom,
+        "size": points,
+        "scale": scale,
+        "filename": filename,
+    })
+
+with open(os.path.join(destination, "Contents.json"), "w", encoding="utf-8") as handle:
+    json.dump({"images": images, "info": {"version": 1, "author": "xcode"}},
+              handle, indent=2)
+    handle.write("\n")
+PY
 else
     echo "AppIcon.appiconset not found - leaving icon catalog alone." >&2
 fi

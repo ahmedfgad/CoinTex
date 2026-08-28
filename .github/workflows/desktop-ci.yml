@@ -38,7 +38,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             xvfb libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 \
-            libsdl2-ttf-2.0-0 libgl1-mesa-dri libgles2 libmtdev1
+            libsdl2-ttf-2.0-0 libgl1-mesa-dri libgles2 libmtdev1 xclip
 
       - name: Install Python requirements
         run: |
@@ -50,17 +50,12 @@ jobs:
           # find -regex puts the longer alternative first so .py and .pyi both match.
           python -m compileall -q .
 
-      - name: Boot the app under xvfb (3 second smoke test)
+      - name: Run focused unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Exercise the app under xvfb
         env:
           SDL_AUDIODRIVER: dummy
+          XDG_CONFIG_HOME: /tmp/cointex-smoke-data
         run: |
-          # Start the app, wait briefly, kill it. If it crashes during import or
-          # the first frame, this step fails. Successful exit (via SIGTERM) is OK.
-          xvfb-run -a timeout --preserve-status 3 python main.py || code=$?
-          # 124 = timeout fired (good — the app stayed up). 143 = SIGTERM (good).
-          # 0 = app exited cleanly. Anything else is a real failure.
-          if [ "${code:-0}" != "0" ] && [ "${code:-0}" != "124" ] && [ "${code:-0}" != "143" ]; then
-              echo "main.py exited $code under xvfb" >&2
-              exit "$code"
-          fi
-          echo "Smoke test passed"
+          xvfb-run -a timeout 15 python tools/smoke_test_app.py

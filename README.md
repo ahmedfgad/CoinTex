@@ -41,6 +41,9 @@ Run the game from source. See [Run from source](#run-from-source) below.
 The goal of every level is to collect all the coins before the timer at the top runs out.
 
 - Tap anywhere on the screen and your character walks there.
+- On a computer, use WASD or the arrow keys to move in steps and Space to fire.
+- Use the on-screen Pause/Leave control. Android Back and desktop Escape follow
+  the same safe navigation path instead of closing an active level abruptly.
 - Collect every coin to finish the level and unlock the next one.
 - Your health bar is at the top left. Touching a monster or fire drains it. When it reaches zero you lose the level.
 - Finish a level with more health left to earn up to 3 stars.
@@ -146,17 +149,19 @@ If you run the game on a machine with no audio output, such as some virtual mach
 
 ### Android
 
-The Android app is built with [Buildozer](https://github.com/kivy/buildozer) using the settings in `buildozer.spec`. It targets Android 16 (API level 36), and its Android packaging tools are pinned in `requirements-android.txt`. The helper script builds the signed release files:
+The Android app is built with [Buildozer](https://github.com/kivy/buildozer) using the settings in `buildozer.spec`. It targets Android 16 (API level 36), uses NDK r28c for 16 KB page-size compatibility, and pins its Android packaging tools in `requirements-android.txt`. The manifest identifies CoinTex as a landscape game, retains Kivy's working Back callback on API 36, and disables cloud backup of local progress. The helper script builds the signed release files:
 
 ```
 ./build_android.sh
 ```
 
-It produces an `.aab` for Google Play and an `.apk` for testing in the `bin` folder. Signing the release is described in [SIGNING.md](SIGNING.md).
+It produces an `.aab` for Google Play and an `.apk` for testing in the `bin` folder. Both are checked for the required ABIs and 16 KB alignment of every 64-bit native library; the APK is also checked for target API 36. Signing the release is described in [SIGNING.md](SIGNING.md).
 
-### iPhone
+### iPhone and the App Store
 
-iOS apps must be built on a Mac. You do not need to own one: the GitHub Actions workflow at `.github/workflows/ios-build.yml` builds the app on a free macOS runner and gives you the files to install. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md). If you do have a Mac, the `build_ios.sh` script builds the Xcode project locally.
+iOS apps must be built with Xcode on macOS. You do not need to own a Mac: the GitHub Actions workflow at `.github/workflows/ios-build.yml` uses a macOS runner to create a validated unsigned test IPA and portable Xcode project. The separate protected workflow at `.github/workflows/ios-app-store.yml` creates the signed App Store archive only after Apple credentials are configured. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md) for builds and [APP_STORE_SUBMISSION.md](APP_STORE_SUBMISSION.md) for publishing.
+
+The first store release targets iPhone. App Store Connect can also offer that same iPhone app on Apple-silicon Macs; it is not a native macOS build and does not run on Intel Macs. The PyInstaller macOS desktop app remains a separate artifact.
 
 ### Desktop (Windows, Linux, macOS)
 
@@ -183,6 +188,10 @@ If the built program shows a black window on a machine with no working sound out
 | `state.py` | Saved progress and settings. |
 | `autoplay.py` | The in game genetic algorithm Auto Player. |
 | `tools/` | Scripts that generate the sounds and render the sprite preview. |
+| `ios/` | App Store identity, release settings and privacy manifest. |
+| `app_store/` | Prepared App Store metadata and iPhone screenshots. |
+| `android/` | Extra Android 16 manifest application attributes. |
+| `tests/` | Save, networking and Android artifact regression tests. |
 | `PlayerGA/` | The research version of the player that searches with PyGAD. |
 | `cointex_media/` | Screenshots and the promo video. |
 

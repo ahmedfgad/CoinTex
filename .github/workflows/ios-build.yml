@@ -1,21 +1,9 @@
-# Builds the CoinTex iOS app on a macOS runner with kivy-ios.
+# Builds an unsigned CoinTex iPhone app and a portable Xcode project.
 #
-# iOS apps can only be built on macOS, so this uses a GitHub macOS runner.
-# For a public repository these runners are free.
-#
-# What it produces (download from the run's Artifacts section):
-#   1. CoinTex-unsigned-ipa   an unsigned app file for sideloading with AltStore
-#                             or Sideloadly. Those tools sign it with your own
-#                             Apple ID. See IOS_INSTALL.md.
-#   2. CoinTex-xcode-project  the Xcode project. Open it on a Mac to set your
-#                             team, Archive, and upload to the App Store.
-#
-# The app is not signed here, so the build needs no Apple account and no secrets.
-# Signing is done later, either by the sideload tools or in Xcode. A paid Apple
-# Developer account is only needed for the App Store, not for this build.
-#
-# Run it from the Actions tab with "Run workflow", or as part of a release
-# (release.yml) when a version tag like v1.4 is pushed.
+# This workflow deliberately has no Apple credentials. Its Release build is
+# validated against the same metadata, privacy manifest, icons, iOS 26 SDK and
+# clean source staging used by the signed App Store workflow. Use
+# ios-app-store.yml only after the Apple Developer account is ready.
 
 name: Build iOS app
 
@@ -27,10 +15,13 @@ concurrency:
   group: ios-build-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  IOS_CONFIG: ios/CoinTex.xcconfig
+
 jobs:
   build-ios:
-    runs-on: macos-14
-    timeout-minutes: 150
+    runs-on: macos-26
+    timeout-minutes: 180
 
     steps:
       - name: Check out the code
@@ -39,99 +30,67 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Install build tools with Homebrew
-        run: brew install autoconf automake libtool pkg-config
+      - name: Verify the current App Store SDK
+        run: |
+          xcodebuild -version
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iPhoneOS SDK $SDK_VERSION"
+          XCODE_MAJOR="$(xcodebuild -version | awk '/^Xcode / {split($2, v, "."); print v[1]}')"
+          SDK_MAJOR="$(echo "$SDK_VERSION" | awk -F. '{print $1}')"
+          if [ "$XCODE_MAJOR" -lt 26 ] || [ "$SDK_MAJOR" -lt 26 ]; then
+            echo "App Store uploads require Xcode 26 and the iOS 26 SDK." >&2
+            exit 1
+          fi
 
-      - name: Install kivy-ios
+      - name: Install native build tools
+        run: |
+          brew install autoconf automake libtool pkg-config libjpeg
+          brew link libtool || true
+
+      - name: Install the pinned iOS toolchain
         run: |
           python -m pip install --upgrade pip
-          python -m pip install kivy-ios cython
+          python -m pip install -r requirements-ios.txt
 
-      # The toolchain build (python3 and kivy) is the long step. Caching the
-      # build and dist folders makes later runs much faster. To force a clean
-      # build, change the key suffix (v1 to v2) or delete the cache from the
-      # Actions cache list.
-      - name: Cache the kivy-ios toolchain
+      - name: Cache the kivy-ios distribution
         uses: actions/cache@v4
         with:
           path: |
             build
             dist
-          key: ${{ runner.os }}-kivyios-v1
+          key: ${{ runner.os }}-${{ runner.arch }}-sdk26-kivyios-${{ hashFiles('requirements-ios.txt') }}-v2
 
-      - name: Build the iOS toolchain (python3 and kivy)
-        run: toolchain build python3 kivy
-
-      # Copy only the files the app needs at run time into a clean folder. This
-      # keeps the dev environment, build outputs and any secrets out of the app.
-      # The game loads its Python modules and the wav files in music/. The art
-      # is drawn in code, so no image files are bundled.
-      - name: Stage the app files
+      - name: Build Python and Kivy for iOS
         run: |
-          mkdir -p ios_app/music
-          cp ./*.py ios_app/
-          cp music/*.wav ios_app/music/
-          echo "Staged files:"
-          ls -R ios_app
+          toolchain build python3 kivy
+          CERTIFI_REQUIREMENT="$(awk '/^certifi==/ {print; exit}' requirements-ios.txt)"
+          test -n "$CERTIFI_REQUIREMENT"
+          toolchain pip install "$CERTIFI_REQUIREMENT"
 
-      - name: Create the Xcode project
-        run: toolchain create CoinTex ios_app
-
-      # kivy-ios's template puts the Kivy logo in icon.png and ships an empty
-      # AppIcon.appiconset, so the home-screen icon and launch screen both
-      # default to the Kivy logo. Replace them with the CoinTex artwork.
-      - name: Apply the CoinTex icon and presplash
+      - name: Stage only runtime app files
         run: |
-          PROJ_DIR=$(ls -d *-ios | head -1)
+          mkdir -p .ios-app/music
+          cp ./*.py .ios-app/
+          cp music/*.wav .ios-app/music/
+          test -f .ios-app/main.py
+
+      - name: Create and configure the Xcode project
+        run: |
+          toolchain create CoinTex .ios-app
+          PROJ_DIR="$(find . -maxdepth 1 -type d -name '*-ios' | head -1)"
+          test -n "$PROJ_DIR"
+          python tools/ios_configure_project.py "$PROJ_DIR" --app-source .ios-app
           tools/ios_apply_assets.sh "$PROJ_DIR" cointex_logo.png cointex_presplash.png
-
-      # kivy-ios may write the folder name in lower case, so find it instead of
-      # guessing. Save the names for the next steps.
-      - name: Find the Xcode project
-        run: |
-          PROJ_DIR=$(ls -d *-ios | head -1)
-          XCODEPROJ=$(find "$PROJ_DIR" -maxdepth 1 -name '*.xcodeproj' | head -1)
-          SCHEME=$(basename "$XCODEPROJ" .xcodeproj)
+          XCODEPROJ="$(find "$PROJ_DIR" -maxdepth 1 -name '*.xcodeproj' | head -1)"
+          SCHEME="$(basename "$XCODEPROJ" .xcodeproj)"
           echo "PROJ_DIR=$PROJ_DIR" >> "$GITHUB_ENV"
           echo "XCODEPROJ=$XCODEPROJ" >> "$GITHUB_ENV"
           echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
-          echo "Found $XCODEPROJ with scheme $SCHEME"
-          xcodebuild -list -project "$XCODEPROJ" || true
+          xcodebuild -list -project "$XCODEPROJ"
 
-      # kivy-ios writes its own default name, bundle id and version into the app
-      # Info.plist, and allows every orientation. Set the CoinTex values here so
-      # the built app matches the Android app and stays landscape only. Editing
-      # the Info.plist is needed because kivy-ios stores literal values, so
-      # passing them to xcodebuild has no effect.
-      - name: Set the app metadata
-        run: |
-          PLIST=$(find "$PROJ_DIR" -name "${SCHEME}-Info.plist" | head -1)
-          if [ -z "$PLIST" ]; then PLIST=$(find "$PROJ_DIR" -name "*-Info.plist" | head -1); fi
-          echo "Editing $PLIST"
-          PB=/usr/libexec/PlistBuddy
-          $PB -c "Set :CFBundleIdentifier coin.tex.cointexreactfast" "$PLIST"
-          $PB -c "Set :CFBundleDisplayName CoinTex" "$PLIST" || $PB -c "Add :CFBundleDisplayName string CoinTex" "$PLIST"
-          $PB -c "Set :CFBundleName CoinTex" "$PLIST" || true
-          $PB -c "Set :CFBundleShortVersionString 1.4" "$PLIST" || $PB -c "Add :CFBundleShortVersionString string 1.4" "$PLIST"
-          $PB -c "Set :CFBundleVersion 10400" "$PLIST" || $PB -c "Add :CFBundleVersion string 10400" "$PLIST"
-          # The 2-player feature talks to a nearby device over the local network.
-          $PB -c "Add :NSLocalNetworkUsageDescription string 'CoinTex uses the local network to play with a nearby device.'" "$PLIST" || true
-          $PB -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
-          $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
-          $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
-          $PB -c "Add :UISupportedInterfaceOrientations: string UIInterfaceOrientationLandscapeLeft" "$PLIST"
-          $PB -c "Add :UISupportedInterfaceOrientations: string UIInterfaceOrientationLandscapeRight" "$PLIST"
-          echo "--- updated values ---"
-          $PB -c "Print :CFBundleIdentifier" "$PLIST"
-          $PB -c "Print :CFBundleShortVersionString" "$PLIST"
-          $PB -c "Print :CFBundleVersion" "$PLIST"
-          $PB -c "Print :UISupportedInterfaceOrientations" "$PLIST"
-
-      # Build for a real device without signing. Signing is left to Xcode or the
-      # sideload tools, which sign with the user's own Apple ID.
-      - name: Build the app (unsigned)
+      - name: Build the unsigned Release app
         run: |
           xcodebuild \
             -project "$XCODEPROJ" \
@@ -140,28 +99,32 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build_dd \
+            -xcconfig "$IOS_CONFIG" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             clean build
 
-      # Wrap the built .app in a Payload folder and zip it as an .ipa. This is
-      # the layout AltStore and Sideloadly expect. The -y flag keeps symlinks
-      # inside the app intact.
-      - name: Package the unsigned .ipa
+      - name: Validate App Store-critical bundle contents
         run: |
-          APP=$(find build_dd/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
-          echo "Packaging $APP"
-          rm -rf Payload
+          APP="$(find build_dd/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)"
+          test -n "$APP"
+          python tools/ios_validate_app.py "$APP"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+      - name: Package the unsigned IPA
+        run: |
           mkdir Payload
           cp -R "$APP" Payload/
-          zip -r -y CoinTex-unsigned.ipa Payload >/dev/null
+          ditto -c -k --sequesterRsrc --keepParent Payload CoinTex-unsigned.ipa
           ls -lh CoinTex-unsigned.ipa
 
-      - name: Zip the Xcode project
-        run: zip -r -y CoinTex-xcode-project.zip "$PROJ_DIR" >/dev/null
+      - name: Package the portable Xcode project
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "$PROJ_DIR" CoinTex-xcode-project.zip
+          ls -lh CoinTex-xcode-project.zip
 
-      - name: Upload the unsigned .ipa
+      - name: Upload the unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: CoinTex-unsigned-ipa
@@ -179,11 +142,11 @@ jobs:
         run: |
           {
             echo "## CoinTex iOS build"
-            echo ""
-            echo "Two files are ready in the Artifacts section of this run."
-            echo ""
-            echo "- CoinTex-unsigned-ipa: an unsigned app file. Install it on an iPhone with AltStore or Sideloadly, which sign it with your own Apple ID. See IOS_INSTALL.md."
-            echo "- CoinTex-xcode-project: the Xcode project. Open it on a Mac to set your team, Archive, and upload to the App Store."
-            echo ""
-            echo "The app was not signed here, so no Apple account or secrets were needed."
+            echo
+            echo "The Release app passed bundle, SDK 26, arm64, privacy-manifest, metadata and icon-catalog checks."
+            echo
+            echo "- **CoinTex-unsigned-ipa** is for sideload testing only."
+            echo "- **CoinTex-xcode-project** is portable and can be opened on a Mac for device testing and Xcode-managed signing."
+            echo
+            echo "No Apple credentials were used. This is not the signed App Store IPA."
           } >> "$GITHUB_STEP_SUMMARY"

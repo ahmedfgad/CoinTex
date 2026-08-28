@@ -1,0 +1,27 @@
+// App Store identity and release metadata.
+//
+// Keep CURRENT_PROJECT_VERSION unique for every build uploaded to App Store
+// Connect, including rejected/TestFlight builds. MARKETING_VERSION is the
+// version customers see. The bundle identifier must match the App ID created
+// in the Apple Developer account and cannot be changed after the first upload.
+
+APP_DISPLAY_NAME = CoinTex
+PRODUCT_NAME = CoinTex
+PRODUCT_BUNDLE_IDENTIFIER = coin.tex.cointexreactfast
+MARKETING_VERSION = 1.4.1
+CURRENT_PROJECT_VERSION = 10401
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+
+// The first App Store release is intentionally iPhone-only. It can still be
+// offered as an iPhone app on Apple-silicon Macs through App Store Connect.
+TARGETED_DEVICE_FAMILY = 1
+SUPPORTS_MACCATALYST = NO
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES
+
+// kivy-ios loads Python extension modules dynamically. Stripping them breaks
+// the app, so retain the settings recommended by the kivy-ios project.
+COPY_PHASE_STRIP = NO
+STRIP_INSTALLED_PRODUCT = NO
+DEAD_CODE_STRIPPING = NO
+ENABLE_BITCODE = NO
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon

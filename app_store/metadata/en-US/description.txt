@@ -1,0 +1,19 @@
+Collect every coin before time runs out in a colorful arcade challenge built for quick play and deeper mastery.
+
+Explore six worlds and 60 handcrafted levels. Each world introduces faster enemies, moving and pulsing hazards, tougher monsters, freeze clocks, and new tactical decisions. Move with a tap, dodge danger, and use the auto-aiming blaster when a monster gets too close.
+
+Features:
+
+• 6 worlds and 60 levels
+• Responsive tap-to-move controls
+• Monsters, fire hazards, freeze clocks, and an auto-aiming blaster
+• Up to three stars per level based on remaining health
+• A built-in tutorial and illustrated game guide
+• An Auto Player that can take over and demonstrate each level
+• Optional two-player Co-op and Versus modes over a direct network connection
+• Progress and settings stored on your device
+• No ads, analytics, tracking, accounts, or in-app purchases
+
+In Co-op, work together to clear the arena. In Versus, race for the same coins and finish with the higher score. Nearby play works over the same Wi-Fi; advanced players can also connect directly over the internet.
+
+Every screen and game character is drawn in code with Python and Kivy.

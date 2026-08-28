@@ -3,6 +3,7 @@
 # The actual gameplay screen lives in main.py.
 
 import math
+import queue
 import random
 import threading
 
@@ -50,7 +51,25 @@ ABOUT_TEXT = (
     "\n"
     "Created by Ahmed Fawzy Gad.\n"
     "Email: ahmed.f.gad@gmail.com\n"
-    "Source code: https://github.com/ahmedfgad/CoinTex"
+    "Source code: https://github.com/ahmedfgad/CoinTex\n"
+    "Privacy: https://github.com/ahmedfgad/CoinTex/blob/master/PRIVACY.md"
+)
+
+PRIVACY_TEXT = (
+    "CoinTex does not require an account and has no advertising, analytics, "
+    "tracking, or in-app purchases. Game progress and settings stay in the "
+    "app's private storage on this device.\n\n"
+    "Multiplayer is optional and connects the two players directly. CoinTex "
+    "does not route or retain gameplay messages on a developer server. When "
+    "you open Host Game, the app asks api.ipify.org for your public IP over "
+    "verified HTTPS so it can show the address used for optional internet "
+    "play. CoinTex does not retain that address after you leave the screen.\n\n"
+    "On Apple devices, Local Network access is used only for nearby "
+    "multiplayer. CoinTex does not request precise location, contacts, photos, "
+    "camera, or microphone access.\n\n"
+    "Full policy:\n"
+    "https://github.com/ahmedfgad/CoinTex/blob/master/PRIVACY.md\n\n"
+    "Privacy contact: ahmed.f.gad@gmail.com"
 )
 
 
@@ -108,14 +127,19 @@ class StyledButton(ButtonBehavior, Label):
         with self.canvas.before:
             self._color = Color(*self.bg)
             self._rect = RoundedRectangle(radius=[dp(12)])
-        self.bind(pos=self._sync, size=self._sync, bg=self._sync_color)
+        self.bind(pos=self._sync, size=self._sync, bg=self._sync_color,
+                  disabled=self._sync_color)
 
     def _sync(self, *args):
         self._rect.pos = self.pos
         self._rect.size = self.size
 
     def _sync_color(self, *args):
-        self._color.rgba = self.bg
+        if self.disabled:
+            self._color.rgba = [self.bg[0] * 0.65, self.bg[1] * 0.65,
+                                self.bg[2] * 0.65, self.bg[3] * 0.7]
+        else:
+            self._color.rgba = self.bg
 
     def on_press(self):
         running = app()
@@ -124,7 +148,30 @@ class StyledButton(ButtonBehavior, Label):
         self._color.rgba = [self.bg[0] * 0.8, self.bg[1] * 0.8, self.bg[2] * 0.8, self.bg[3]]
 
     def on_release(self):
-        self._color.rgba = self.bg
+        self._sync_color()
+
+
+class PanelLabel(Label):
+    """Readable HUD text on both bright and dark world backgrounds."""
+
+    panel_color = ListProperty([0.04, 0.06, 0.10, 0.66])
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("padding", (dp(8), dp(3)))
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            self._panel_color = Color(*self.panel_color)
+            self._panel = RoundedRectangle(radius=[dp(8)])
+        self.bind(pos=self._sync_panel, size=self._sync_panel,
+                  panel_color=self._sync_panel_color)
+        self._sync_panel()
+
+    def _sync_panel(self, *args):
+        self._panel.pos = self.pos
+        self._panel.size = self.size
+
+    def _sync_panel_color(self, *args):
+        self._panel_color.rgba = self.panel_color
 
 
 class ConfirmDialog(ModalView):
@@ -586,7 +633,6 @@ class LevelSelectScreen(StyledScreen):
                  joint="round", cap="round")
 
     def _scroll_to_highest(self) -> None:
-        running = app()
         nodes = [c for c in self.map_widget.children if isinstance(c, LevelNode)]
         if not nodes:
             return
@@ -618,10 +664,13 @@ class SettingsScreen(StyledScreen):
         vol_row = BoxLayout(orientation="horizontal", spacing=dp(10),
                             size_hint_y=None, height=BTN_HEIGHT)
         vol_row.add_widget(Label(text="Volume", font_size=sp(18),
-                                 size_hint_x=0.35, color=[1, 1, 1, 1]))
-        self.volume = Slider(min=0, max=1, value=1, step=0.05, size_hint_x=0.65)
+                                 size_hint_x=0.27, color=[1, 1, 1, 1]))
+        self.volume = Slider(min=0, max=1, value=1, step=0.05, size_hint_x=0.55)
         self.volume.bind(value=self._on_volume)
         vol_row.add_widget(self.volume)
+        self.volume_label = Label(text="100%", font_size=sp(16), bold=True,
+                                  size_hint_x=0.18, color=[1, 1, 1, 0.9])
+        vol_row.add_widget(self.volume_label)
         box.add_widget(vol_row)
 
         auto = StyledButton(text="Auto Player", bg=[0.3, 0.6, 0.55, 1],
@@ -644,6 +693,7 @@ class SettingsScreen(StyledScreen):
         running = app()
         running.audio.play_menu_music()
         self.volume.value = running.state.get_setting("volume")
+        self.volume_label.text = "{}%".format(int(round(self.volume.value * 100)))
         self._refresh_labels()
 
     def _refresh_labels(self):
@@ -664,6 +714,7 @@ class SettingsScreen(StyledScreen):
 
     def _on_volume(self, slider, value):
         running = app()
+        self.volume_label.text = "{}%".format(int(round(value * 100)))
         running.state.set_setting("volume", round(value, 2))
         running.audio.apply_settings()
 
@@ -672,6 +723,7 @@ class SettingsScreen(StyledScreen):
             running = app()
             running.state.reset_progress()
             running.audio.apply_settings()
+            InfoDialog("Progress reset", "Campaign scores and stars were cleared.").open()
         ConfirmDialog("Reset all progress?\nThis cannot be undone.", do_reset,
                      yes_text="Reset", no_text="Cancel").open()
 
@@ -681,7 +733,7 @@ class AboutScreen(StyledScreen):
         outer = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(14))
         outer.add_widget(Label(text="About", font_size=sp(34), bold=True,
                               size_hint_y=0.12, color=[1, 1, 1, 1]))
-        scroll = ScrollView(size_hint_y=0.74)
+        scroll = ScrollView()
         text = Label(text=ABOUT_TEXT, font_size=sp(20), color=[1, 1, 1, 1],
                      halign="left", valign="top", padding=(dp(8), dp(8)))
         text.bind(width=lambda *a: setattr(text, "text_size", (text.width, None)))
@@ -689,8 +741,37 @@ class AboutScreen(StyledScreen):
         text.size_hint_y = None
         scroll.add_widget(text)
         outer.add_widget(scroll)
-        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1], size_hint_y=0.14)
+        privacy = StyledButton(text="Privacy Policy", bg=[0.25, 0.5, 0.9, 1],
+                               size_hint_y=None, height=BTN_HEIGHT)
+        privacy.bind(on_release=lambda *a: app().go("privacy"))
+        outer.add_widget(privacy)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
         back.bind(on_release=lambda *a: app().go("menu"))
+        outer.add_widget(back)
+        self.root_layout.add_widget(outer)
+
+    def on_enter(self):
+        app().audio.play_menu_music()
+
+
+class PrivacyScreen(StyledScreen):
+    def build(self):
+        outer = BoxLayout(orientation="vertical", padding=dp(24), spacing=dp(14))
+        outer.add_widget(Label(text="Privacy Policy", font_size=sp(34), bold=True,
+                               size_hint_y=None, height=TITLE_HEIGHT,
+                               color=[1, 1, 1, 1]))
+        scroll = ScrollView()
+        text = Label(text=PRIVACY_TEXT, font_size=sp(20), color=[1, 1, 1, 1],
+                     halign="left", valign="top", padding=(dp(8), dp(8)))
+        text.bind(width=lambda *a: setattr(text, "text_size", (text.width, None)))
+        text.bind(texture_size=lambda *a: setattr(text, "height", text.texture_size[1]))
+        text.size_hint_y = None
+        scroll.add_widget(text)
+        outer.add_widget(scroll)
+        back = StyledButton(text="Back", bg=[0.45, 0.45, 0.5, 1],
+                            size_hint_y=None, height=BTN_HEIGHT)
+        back.bind(on_release=lambda *a: app().go("about"))
         outer.add_widget(back)
         self.root_layout.add_widget(outer)
 
@@ -1341,6 +1422,8 @@ class HostScreen(StyledScreen):
             self.addr_label.text = "Same Wi-Fi address\n{}   port {}".format(
                 net.get_local_ip(), self.net.port)
         except Exception as error:
+            self.net.stop()
+            self.net = None
             self.addr_label.text = "Could not start hosting."
             self.status.text = str(error)
 
@@ -1388,7 +1471,7 @@ class HostScreen(StyledScreen):
         while True:
             try:
                 msg = self.net.inbox.get_nowait()
-            except Exception:
+            except queue.Empty:
                 break
             kind = msg.get("t")
             if kind == "_connected":
@@ -1443,7 +1526,9 @@ class JoinScreen(StyledScreen):
         box.add_widget(prompt)
         self.ip_input = TextInput(text="", multiline=False, font_size=sp(20),
                                   size_hint_y=None, height=INPUT_HEIGHT,
-                                  write_tab=False)
+                                  write_tab=False,
+                                  hint_text="192.168.1.25 or host name")
+        self.ip_input.bind(on_text_validate=lambda *_: self._connect())
         box.add_widget(self.ip_input)
         self.status = Label(text="", font_size=sp(15), color=[1, 1, 1, 0.9],
                             size_hint_y=None, height=dp(48))
@@ -1471,9 +1556,7 @@ class JoinScreen(StyledScreen):
         self.ip_input.cursor = (len(self.ip_input.text), 0)
 
     def on_leave(self):
-        if self._poll is not None:
-            self._poll.cancel()
-            self._poll = None
+        self._stop_poll()
         if self.net is not None and not self._handed_off:
             self.net.stop()
         if not self._handed_off:
@@ -1491,13 +1574,18 @@ class JoinScreen(StyledScreen):
         if self._poll is None:
             self._poll = Clock.schedule_interval(self._check, 0.1)
 
+    def _stop_poll(self):
+        if self._poll is not None:
+            self._poll.cancel()
+            self._poll = None
+
     def _check(self, dt):
         if self.net is None:
             return
         while True:
             try:
                 msg = self.net.inbox.get_nowait()
-            except Exception:
+            except queue.Empty:
                 break
             kind = msg.get("t")
             if kind == "_connect_failed":
@@ -1505,6 +1593,7 @@ class JoinScreen(StyledScreen):
                 self.connect_btn.disabled = False
                 self.net.stop()
                 self.net = None
+                self._stop_poll()
                 return
             elif kind == "_connected":
                 self.status.text = "Connected. Waiting for the host to start..."
@@ -1514,6 +1603,7 @@ class JoinScreen(StyledScreen):
                     self.connect_btn.disabled = False
                     self.net.stop()
                     self.net = None
+                    self._stop_poll()
                     return
                 app().state.set_setting("mp_last_ip", self.ip_input.text.strip())
                 self._handed_off = True
@@ -1524,6 +1614,7 @@ class JoinScreen(StyledScreen):
                 self.connect_btn.disabled = False
                 self.net.stop()
                 self.net = None
+                self._stop_poll()
                 return
 
     def _leave(self):

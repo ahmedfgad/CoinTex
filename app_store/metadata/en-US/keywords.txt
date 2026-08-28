@@ -1,0 +1,1 @@
+arcade,collector,offline,multiplayer,autoplay,retro,casual,action,maze,coins

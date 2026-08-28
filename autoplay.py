@@ -23,6 +23,10 @@ from kivy.clock import Clock
 RETARGET_DELAY = 0.15
 # Shoot when the nearest monster is within this distance of the player.
 FIRE_RANGE = 0.22
+TARGET_LEFT = 0.07
+TARGET_RIGHT = 0.93
+TARGET_BOTTOM = 0.12
+TARGET_TOP = 0.90
 
 # Safety is the main concern. The player keeps away from monsters and fire and
 # only goes for a coin when it can do so without risking its health. Coin pull is
@@ -280,11 +284,12 @@ class AutoPlayer:
                             reverse=True)
 
             best = ranked[0]
-            player = screen.player
-            if player is None or not screen.active:
+            if screen.player is None or not screen.active:
                 break
-            player.tx = min(max(best[0], 0.05), 0.95)
-            player.ty = min(max(best[1], 0.05), 0.95)
+            target_x = min(max(best[0], TARGET_LEFT), TARGET_RIGHT)
+            target_y = min(max(best[1], TARGET_BOTTOM), TARGET_TOP)
+            Clock.schedule_once(
+                lambda dt, x=target_x, y=target_y: self._move(x, y), 0)
 
             if should_fire(snapshot):
                 # Firing adds a widget, so it has to run in the main thread.
@@ -311,5 +316,12 @@ class AutoPlayer:
 
     def _fire(self):
         screen = self.screen
-        if screen.active and not screen.paused:
+        if (not self._stop and screen.auto_mode and screen.active
+                and not screen.paused):
             screen.fire()  # the game checks ammo and cooldown and aims for us
+
+    def _move(self, target_x, target_y):
+        screen = self.screen
+        if (not self._stop and screen.auto_mode and screen.active
+                and not screen.paused and screen.player is not None):
+            screen._set_local_target(target_x, target_y)

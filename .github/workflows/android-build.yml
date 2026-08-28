@@ -1,7 +1,8 @@
 # Builds the CoinTex Android package with Buildozer and uploads the .apk.
 #
-# This builds the DEBUG apk, which is unsigned. That is deliberate: it needs no
-# keystore and no secrets, so the workflow runs on a fork or a fresh clone with
+# This builds the DEBUG apk, which uses Android's disposable debug key rather
+# than the private Play upload key. It needs no secrets, so the workflow runs on
+# a fork or a fresh clone with
 # nothing to configure. It is the same thing `./build_android.sh --debug` does
 # locally, reading the shared buildozer.spec, so a green local debug build
 # predicts a green CI build. The signed release .aab for Google Play is still
@@ -74,7 +75,7 @@ jobs:
             ${{ runner.os }}-buildozer-2204-api36-
 
       # Equivalent to `./build_android.sh --debug --skip-deps`: a debug apk
-      # needs no signing. Run buildozer directly so we don't drag in the local
+      # needs no release signing secret. Run buildozer directly so we don't drag in the local
       # script's venv/setup bootstrapping, which CI already handles above.
       - name: Build the debug apk
         run: buildozer android debug
@@ -86,6 +87,19 @@ jobs:
           test -n "$APK" || { echo "no apk produced" >&2; ls -lR bin || true; exit 1; }
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "Built $APK"
+
+      - name: Validate API level, ABIs, and 16 KB native alignment
+        env:
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          AAPT="$(find "$HOME/.buildozer" -type f -name aapt 2>/dev/null | sort -V | tail -1)"
+          test -n "$AAPT" || { echo "Android aapt was not found" >&2; exit 1; }
+          BADGING="$($AAPT dump badging "$APK")"
+          echo "$BADGING" | grep -F "targetSdkVersion:'36'"
+          NATIVE_LINE="$(echo "$BADGING" | grep -F "native-code:")"
+          echo "$NATIVE_LINE" | grep -F "'arm64-v8a'"
+          echo "$NATIVE_LINE" | grep -F "'armeabi-v7a'"
+          python tools/validate_android_artifact.py "$APK"
 
       - name: Upload the apk
         uses: actions/upload-artifact@v4

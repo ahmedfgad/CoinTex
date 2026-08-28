@@ -12,7 +12,7 @@
 #
 # Options:
 #   ./build_android.sh             build the release .aab and .apk
-#   ./build_android.sh --debug     build a quick unsigned debug .apk only
+#   ./build_android.sh --debug     build a quick debug-key-signed .apk only
 #   ./build_android.sh --skip-deps do not check the system build tools
 #
 # The first build downloads the Android SDK and NDK (a few GB) and can take
@@ -21,6 +21,13 @@
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 PROJECT_DIR="$(pwd)"
+PIP_CONSTRAINT_FILE="$PROJECT_DIR/android-pip-constraints.txt"
+
+# python-for-android creates a temporary Python 3.14 environment and upgrades
+# pip while assembling pure-Python dependencies. pip 26 currently leaves that
+# environment with mixed 25.x/26.x internals, so keep the known-good version
+# until the upstream packaging path supports pip 26.
+export PIP_CONSTRAINT="$PIP_CONSTRAINT_FILE"
 
 MODE="release"
 SKIP_DEPS=0
@@ -132,13 +139,18 @@ echo "Build finished. Files in ./bin:"
 ls -1 bin/ 2>/dev/null || true
 
 # Print package details from the apk using aapt from the downloaded SDK.
-AAPT="$(find "$HOME/.buildozer" -type f -name aapt 2>/dev/null | sort | tail -1 || true)"
-APK="$(ls -1 bin/*.apk 2>/dev/null | head -1 || true)"
-if [[ -n "$AAPT" && -n "$APK" ]]; then
-    echo ""
-    echo "Details of $APK:"
-    "$AAPT" dump badging "$APK" | grep -E "package:|sdkVersion:|targetSdkVersion:|native-code:" || true
-fi
+AAPT="$(find "$HOME/.buildozer" -type f -name aapt 2>/dev/null | sort -V | tail -1 || true)"
+APK="$(ls -1t bin/*release*.apk 2>/dev/null | head -1 || true)"
+ABUNDLE="$(ls -1t bin/*release*.aab 2>/dev/null | head -1 || true)"
+test -n "$AAPT" || { echo "Android aapt was not found" >&2; exit 1; }
+test -n "$APK" || { echo "Release APK was not found" >&2; exit 1; }
+test -n "$ABUNDLE" || { echo "Release AAB was not found" >&2; exit 1; }
+echo ""
+echo "Details of $APK:"
+"$AAPT" dump badging "$APK" | grep -E "package:|sdkVersion:|targetSdkVersion:|native-code:"
+"$AAPT" dump badging "$APK" | grep -F "targetSdkVersion:'36'" >/dev/null
+python tools/validate_android_artifact.py "$APK"
+python tools/validate_android_artifact.py "$ABUNDLE"
 
 echo ""
 echo "Next steps:"

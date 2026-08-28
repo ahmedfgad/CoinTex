@@ -1,0 +1,290 @@
+# Produces the signed App Store Connect IPA. This workflow is manual, isolated
+# from normal releases, and cannot sign anything until the documented Apple
+# credentials are stored in the protected `app-store` GitHub environment.
+
+name: Build signed iOS App Store app
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_to_app_store_connect:
+        description: Validate with Apple and upload the IPA to App Store Connect
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: ios-app-store-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IOS_CONFIG: ios/CoinTex.xcconfig
+  BUNDLE_ID: coin.tex.cointexreactfast
+
+jobs:
+  app-store:
+    runs-on: macos-26
+    timeout-minutes: 180
+    environment: app-store
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify the current App Store SDK
+        run: |
+          xcodebuild -version
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iPhoneOS SDK $SDK_VERSION"
+          XCODE_MAJOR="$(xcodebuild -version | awk '/^Xcode / {split($2, v, "."); print v[1]}')"
+          SDK_MAJOR="$(echo "$SDK_VERSION" | awk -F. '{print $1}')"
+          if [ "$XCODE_MAJOR" -lt 26 ] || [ "$SDK_MAJOR" -lt 26 ]; then
+            echo "App Store uploads require Xcode 26 and the iOS 26 SDK." >&2
+            exit 1
+          fi
+
+      - name: Verify required signing secrets
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_APP_STORE_PROVISIONING_PROFILE_BASE64 }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          test -n "$IOS_CERTIFICATE_BASE64" || { echo "Missing IOS_DISTRIBUTION_CERTIFICATE_BASE64" >&2; exit 1; }
+          test -n "$IOS_CERTIFICATE_PASSWORD" || { echo "Missing IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" >&2; exit 1; }
+          test -n "$IOS_PROFILE_BASE64" || { echo "Missing IOS_APP_STORE_PROVISIONING_PROFILE_BASE64" >&2; exit 1; }
+          test -n "$IOS_TEAM_ID" || { echo "Missing IOS_TEAM_ID" >&2; exit 1; }
+
+      - name: Install native build tools
+        run: |
+          brew install autoconf automake libtool pkg-config libjpeg
+          brew link libtool || true
+
+      - name: Install the pinned iOS toolchain
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ios.txt
+
+      - name: Cache the kivy-ios distribution
+        uses: actions/cache@v4
+        with:
+          path: |
+            build
+            dist
+          key: ${{ runner.os }}-${{ runner.arch }}-sdk26-kivyios-${{ hashFiles('requirements-ios.txt') }}-v2
+
+      - name: Build Python and Kivy for iOS
+        run: |
+          toolchain build python3 kivy
+          CERTIFI_REQUIREMENT="$(awk '/^certifi==/ {print; exit}' requirements-ios.txt)"
+          test -n "$CERTIFI_REQUIREMENT"
+          toolchain pip install "$CERTIFI_REQUIREMENT"
+
+      - name: Stage only runtime app files
+        run: |
+          mkdir -p .ios-app/music
+          cp ./*.py .ios-app/
+          cp music/*.wav .ios-app/music/
+          test -f .ios-app/main.py
+
+      - name: Create and configure the Xcode project
+        run: |
+          toolchain create CoinTex .ios-app
+          PROJ_DIR="$(find . -maxdepth 1 -type d -name '*-ios' | head -1)"
+          test -n "$PROJ_DIR"
+          python tools/ios_configure_project.py "$PROJ_DIR" --app-source .ios-app
+          tools/ios_apply_assets.sh "$PROJ_DIR" cointex_logo.png cointex_presplash.png
+          XCODEPROJ="$(find "$PROJ_DIR" -maxdepth 1 -name '*.xcodeproj' | head -1)"
+          SCHEME="$(basename "$XCODEPROJ" .xcodeproj)"
+          echo "PROJ_DIR=$PROJ_DIR" >> "$GITHUB_ENV"
+          echo "XCODEPROJ=$XCODEPROJ" >> "$GITHUB_ENV"
+          echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
+          xcodebuild -list -project "$XCODEPROJ"
+
+      - name: Install and verify App Store signing identity
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_APP_STORE_PROVISIONING_PROFILE_BASE64 }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/distribution.p12"
+          PROFILE_PATH="$RUNNER_TEMP/app-store.mobileprovision"
+          PROFILE_PLIST="$RUNNER_TEMP/app-store-profile.plist"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)$(uuidgen)"
+
+          printf '%s' "$IOS_CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          printf '%s' "$IOS_PROFILE_BASE64" | /usr/bin/base64 -D > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$IOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST")"
+          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")"
+          PROFILE_TEAM="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$PROFILE_PLIST")"
+          PROFILE_APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PROFILE_PLIST")"
+          GET_TASK_ALLOW="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PROFILE_PLIST")"
+
+          test "$PROFILE_TEAM" = "$IOS_TEAM_ID" || { echo "Provisioning-profile team mismatch" >&2; exit 1; }
+          test "$PROFILE_APP_ID" = "$IOS_TEAM_ID.$BUNDLE_ID" || { echo "Provisioning profile is not for $BUNDLE_ID" >&2; exit 1; }
+          test "$GET_TASK_ALLOW" = "false" || { echo "A development profile cannot be used for the App Store" >&2; exit 1; }
+          if /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$PROFILE_PLIST" >/dev/null 2>&1; then
+            echo "An ad-hoc/development profile cannot be used for the App Store" >&2
+            exit 1
+          fi
+
+          python - "$PROFILE_PLIST" <<'PY'
+          import datetime
+          import plistlib
+          import sys
+
+          with open(sys.argv[1], "rb") as handle:
+              profile = plistlib.load(handle)
+          expiration = profile["ExpirationDate"]
+          now = datetime.datetime.now(datetime.timezone.utc)
+          if expiration.replace(tzinfo=datetime.timezone.utc) <= now:
+              raise SystemExit("Provisioning profile has expired")
+          print("Provisioning profile expires", expiration.isoformat())
+          PY
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+          echo "ARCHIVE_PATH=$RUNNER_TEMP/CoinTex.xcarchive" >> "$GITHUB_ENV"
+
+      - name: Create the signed App Store archive
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -project "$XCODEPROJ" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -xcconfig "$IOS_CONFIG" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            clean archive
+
+      - name: Validate the signed archive locally
+        run: |
+          APP="$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -name '*.app' | head -1)"
+          test -n "$APP"
+          python tools/ios_validate_app.py "$APP" --signed
+
+      - name: Export the App Store IPA
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions.plist"
+          export EXPORT_OPTIONS IOS_TEAM_ID PROFILE_NAME BUNDLE_ID
+          python - <<'PY'
+          import os
+          import plistlib
+
+          options = {
+              "destination": "export",
+              "manageAppVersionAndBuildNumber": False,
+              "method": "app-store-connect",
+              "provisioningProfiles": {
+                  os.environ["BUNDLE_ID"]: os.environ["PROFILE_NAME"],
+              },
+              "signingCertificate": "Apple Distribution",
+              "signingStyle": "manual",
+              "stripSwiftSymbols": True,
+              "teamID": os.environ["IOS_TEAM_ID"],
+              "uploadSymbols": True,
+          }
+          with open(os.environ["EXPORT_OPTIONS"], "wb") as handle:
+              plistlib.dump(options, handle, fmt=plistlib.FMT_XML)
+          PY
+          mkdir appstore_export
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath appstore_export \
+            -exportOptionsPlist "$EXPORT_OPTIONS"
+          IPA="$(find appstore_export -maxdepth 1 -name '*.ipa' | head -1)"
+          test -n "$IPA"
+          echo "IPA=$IPA" >> "$GITHUB_ENV"
+          ls -lh "$IPA"
+
+      - name: Configure App Store Connect API authentication
+        if: ${{ inputs.upload_to_app_store_connect }}
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+        run: |
+          test -n "$API_KEY_ID" || { echo "Missing APP_STORE_CONNECT_API_KEY_ID" >&2; exit 1; }
+          test -n "$API_ISSUER_ID" || { echo "Missing APP_STORE_CONNECT_API_ISSUER_ID" >&2; exit 1; }
+          test -n "$API_PRIVATE_KEY_BASE64" || { echo "Missing APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64" >&2; exit 1; }
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$API_PRIVATE_KEY_BASE64" | /usr/bin/base64 -D \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8"
+
+      - name: Validate the IPA with Apple
+        if: ${{ inputs.upload_to_app_store_connect }}
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          xcrun altool --validate-app --file "$IPA" --type ios \
+            --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID"
+
+      - name: Upload to App Store Connect
+        if: ${{ inputs.upload_to_app_store_connect }}
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          xcrun altool --upload-app --file "$IPA" --type ios \
+            --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID"
+
+      - name: Package debug symbols
+        run: |
+          ditto -c -k --sequesterRsrc "$ARCHIVE_PATH/dSYMs" CoinTex-dSYMs.zip
+
+      - name: Upload the signed IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoinTex-app-store-ipa
+          path: ${{ env.IPA }}
+          retention-days: 14
+
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoinTex-ios-dSYMs
+          path: CoinTex-dSYMs.zip
+          retention-days: 30
+
+      - name: Write a run summary
+        run: |
+          {
+            echo "## CoinTex App Store build"
+            echo
+            echo "The signed archive and exported IPA passed local SDK, metadata, privacy-manifest, architecture, provisioning-profile and code-signature checks."
+            if [ "${{ inputs.upload_to_app_store_connect }}" = "true" ]; then
+              echo "Apple validation passed and the build was uploaded to App Store Connect for TestFlight processing."
+            else
+              echo "The IPA was not uploaded. Re-run with **upload_to_app_store_connect** enabled after creating the App Store Connect app record."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -18,6 +18,11 @@ bin/
 # kivy-ios
 .ios-venv/
 CoinTex-ios/
+cointex-ios/
+.ios-app/
+*.xcarchive
+*.mobileprovision
+AuthKey_*.p8
 
 # PyInstaller desktop build output (build_desktop.sh)
 build/

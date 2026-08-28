@@ -31,7 +31,7 @@ import ui
 import autoplay
 import net
 from state import GameState
-from audio import AudioManager
+from audio import AudioManager, SFX_FILES
 
 # Tuning values. Positions are kept as a center point in 0..1 over the play area.
 PLAYER_SPEED = 0.6          # how fast the player moves, screens per second
@@ -58,6 +58,15 @@ RELOAD_SECONDS = 5.0        # time for the gun to refill after it runs out (worl
 DOWN_DELAY = 3.0            # seconds a downed player waits before coming back (2-player)
 # Player 1 is blue, player 2 is orange, so the two are easy to tell apart.
 PLAYER_COLORS = ([0.20, 0.62, 1.0], [1.0, 0.55, 0.2])
+
+# Normalized play bounds leave room for gesture navigation, rounded corners and
+# camera cutouts on modern Android and iPhone screens. They also keep characters
+# out from under the HUD on unusually wide or resized desktop windows.
+PLAY_LEFT = 0.07
+PLAY_RIGHT = 0.93
+PLAY_BOTTOM = 0.12
+PLAY_TOP = 0.90
+KEYBOARD_STEP = 0.14
 
 # A short heads-up shown once before the first level of a world that brings a new
 # mechanic, so the player is ready for it. Keyed by world number.
@@ -195,20 +204,27 @@ class GameScreen(Screen):
         self._rng = random           # swapped for a seeded one in multiplayer
         self._last_input = (0.1, 0.12)   # last target a client sent to the host
         self._ended = False          # guards the one-time multiplayer end overlay
+        self._pause_dialog = None
+        self._background_paused = False
+        self._background_multiplayer_exit = False
 
     def _build_hud(self):
-        self.coin_label = Label(text="", font_size=sp(20), bold=True, color=[1, 1, 1, 1],
-                                size_hint=(0.25, 0.06), pos_hint={"x": 0.02, "top": 0.99})
-        self.level_label = Label(text="", font_size=sp(20), bold=True, color=[1, 1, 1, 1],
-                                 size_hint=(0.2, 0.06), pos_hint={"center_x": 0.5, "top": 0.99})
-        self.time_label = Label(text="", font_size=sp(20), bold=True, color=[1, 1, 0.5, 1],
-                                size_hint=(0.2, 0.06), pos_hint={"right": 0.78, "top": 0.99})
+        self.coin_label = ui.PanelLabel(
+            text="", font_size=sp(18), bold=True, color=[1, 1, 1, 1],
+            size_hint=(0.23, 0.065), pos_hint={"x": 0.045, "top": 0.965})
+        self.level_label = ui.PanelLabel(
+            text="", font_size=sp(18), bold=True, color=[1, 1, 1, 1],
+            size_hint=(0.18, 0.065), pos_hint={"center_x": 0.49, "top": 0.965})
+        self.time_label = ui.PanelLabel(
+            text="", font_size=sp(18), bold=True, color=[1, 1, 0.5, 1],
+            size_hint=(0.18, 0.065), pos_hint={"right": 0.80, "top": 0.965})
         self.hud.add_widget(self.coin_label)
         self.hud.add_widget(self.level_label)
         self.hud.add_widget(self.time_label)
 
         # health bar (drawn in code), top-left under the coin label
-        self.health_holder = FloatLayout(size_hint=(0.25, 0.03), pos_hint={"x": 0.02, "top": 0.92})
+        self.health_holder = FloatLayout(size_hint=(0.23, 0.03),
+                                         pos_hint={"x": 0.045, "top": 0.88})
         with self.health_holder.canvas.before:
             Color(0, 0, 0, 0.4)
             self._hp_bg = Rectangle()
@@ -219,24 +235,27 @@ class GameScreen(Screen):
 
         # Extra line shown only in a 2-player game: both players' health, and in
         # versus the two coin counts. It stays empty (invisible) in single player.
-        self.mp_label = Label(text="", font_size=sp(16), bold=True, color=[1, 1, 1, 1],
-                              halign="left", size_hint=(0.4, 0.05),
-                              pos_hint={"x": 0.02, "top": 0.88})
+        self.mp_label = ui.PanelLabel(
+            text="", font_size=sp(14), bold=True, color=[1, 1, 1, 1],
+            halign="left", size_hint=(0.42, 0.055),
+            pos_hint={"x": 0.045, "top": 0.835})
         self.mp_label.bind(size=lambda *a: setattr(self.mp_label, "text_size", self.mp_label.size))
         self.hud.add_widget(self.mp_label)
 
-        self.pause_btn = ui.StyledButton(text="II", bg=[0.3, 0.3, 0.4, 0.9],
-                                         size_hint=(0.08, 0.08), pos_hint={"right": 0.99, "top": 0.99})
+        self.pause_btn = ui.StyledButton(
+            text="Pause", font_size=sp(14), bg=[0.3, 0.3, 0.4, 0.92],
+            size_hint=(0.10, 0.09), pos_hint={"right": 0.955, "top": 0.965})
         self.pause_btn.bind(on_release=lambda *a: self._open_pause())
         self.hud.add_widget(self.pause_btn)
 
-        self.fire_btn = ui.GunButton(size_hint=(0.17, 0.13), pos_hint={"right": 0.98, "y": 0.03})
+        self.fire_btn = ui.GunButton(size_hint=(0.17, 0.13),
+                                     pos_hint={"right": 0.95, "y": 0.055})
         self.fire_btn.bind(on_release=lambda *a: self.fire())
         self.hud.add_widget(self.fire_btn)
 
         # circular freeze countdown, shown only while a freeze is active
         self.freeze_timer = graphics.FreezeTimer(size_hint=(0.09, 0.14),
-                                                 pos_hint={"center_x": 0.5, "top": 0.90})
+                                                 pos_hint={"center_x": 0.5, "top": 0.87})
         self.freeze_timer.opacity = 0
         self.hud.add_widget(self.freeze_timer)
 
@@ -244,14 +263,15 @@ class GameScreen(Screen):
         # algorithm take over, and tapping again returns to manual control.
         self.auto_btn = ui.StyledButton(text="Auto: Off", bg=[0.45, 0.45, 0.5, 1],
                                         font_size=sp(16), size_hint=(0.17, 0.08),
-                                        pos_hint={"x": 0.02, "y": 0.05})
+                                        pos_hint={"x": 0.045, "y": 0.055})
         self.auto_btn.bind(on_release=lambda *a: self._toggle_auto())
         self.hud.add_widget(self.auto_btn)
 
         # Shows while the agent is in control so it is clear who is playing.
         self.auto_indicator = Label(text="AUTO", font_size=sp(16), bold=True,
                                     color=[0.3, 1.0, 0.5, 1], opacity=0,
-                                    size_hint=(0.17, 0.05), pos_hint={"x": 0.02, "y": 0.14})
+                                    size_hint=(0.17, 0.05),
+                                    pos_hint={"x": 0.045, "y": 0.145})
         self.hud.add_widget(self.auto_indicator)
 
     def _sync_health(self, *args):
@@ -313,12 +333,17 @@ class GameScreen(Screen):
         self.reload_gun = self.level["gun_reload"]
         self.active = True
         self.paused = False
+        self._background_paused = False
+        self._background_multiplayer_exit = False
+        self.pause_btn.text = "Leave" if multiplayer else "Pause"
+        self.mp_label.opacity = 1 if multiplayer else 0
 
-        # Player 1 starts bottom-left. Per-player state (health, ammo, coins)
+        # Players start clear of the lower Auto and gun controls. Per-player
+        # state (health, ammo, coins)
         # lives on the sprite so the same code handles one or two players.
-        self.player = self._make_player(0.1, 0.12, PLAYER_COLORS[0])
+        self.player = self._make_player(0.25, 0.22, PLAYER_COLORS[0])
         if multiplayer:
-            self.player2 = self._make_player(0.9, 0.12, PLAYER_COLORS[1])
+            self.player2 = self._make_player(0.75, 0.25, PLAYER_COLORS[1])
         else:
             self.player2 = None
         # Decide which character this device drives. The host drives player 1,
@@ -343,8 +368,8 @@ class GameScreen(Screen):
             coin = graphics.Coin(size_hint=COIN_SIZE)
             coin.index = k
             coin.cx = self._rng.uniform(section * k + 0.03, section * (k + 1) - 0.03)
-            coin.cx = min(max(coin.cx, 0.05), 0.95)
-            coin.cy = self._rng.uniform(0.2, 0.9)
+            coin.cx = min(max(coin.cx, PLAY_LEFT), PLAY_RIGHT)
+            coin.cy = self._rng.uniform(0.2, PLAY_TOP)
             place(coin)
             self.world.add_widget(coin)
             coin.start()
@@ -389,6 +414,7 @@ class GameScreen(Screen):
 
         self.fire_btn.ammo = self.local_player.ammo
         self.fire_btn.ready = True
+        self.fire_btn.disabled = not bool(self.monsters and self.local_player.ammo > 0)
         self.freeze_timer.opacity = 0
         self._refresh_hud()
 
@@ -430,7 +456,8 @@ class GameScreen(Screen):
         return p
 
     def _random_point(self):
-        return self._rng.uniform(0.1, 0.95), self._rng.uniform(0.15, 0.95)
+        return (self._rng.uniform(PLAY_LEFT + 0.03, PLAY_RIGHT - 0.03),
+                self._rng.uniform(PLAY_BOTTOM + 0.03, PLAY_TOP))
 
     def _spawn_point_away(self):
         # A random point that is not right on top of the player.
@@ -467,6 +494,9 @@ class GameScreen(Screen):
             marker = entry["marker"]
             if marker.parent:
                 marker.parent.remove_widget(marker)
+        for child in list(self.world.children):
+            if isinstance(child, (graphics.ParticleBurst, graphics.FloatingText)):
+                child.stop()
         self.player = None
         self.player2 = None
         self.local_player = None
@@ -493,6 +523,10 @@ class GameScreen(Screen):
         Window.bind(on_key_down=self._on_key)
 
     def on_leave(self):
+        if self._pause_dialog is not None:
+            dialog = self._pause_dialog
+            self._pause_dialog = None
+            dialog.dismiss(animation=False)
         self.auto.stop()
         if self._update_event is not None:
             self._update_event.cancel()
@@ -514,6 +548,35 @@ class GameScreen(Screen):
         if key == 32:  # spacebar fires
             self.fire()
             return True
+        if not self.active or self.paused or self.local_player is None:
+            return False
+        name = (codepoint or "").lower()
+        dx = dy = 0.0
+        if key == 273 or name == "w":
+            dy = KEYBOARD_STEP
+        elif key == 274 or name == "s":
+            dy = -KEYBOARD_STEP
+        elif key == 275 or name == "d":
+            dx = KEYBOARD_STEP
+        elif key == 276 or name == "a":
+            dx = -KEYBOARD_STEP
+        else:
+            return False
+        self._set_local_target(self.local_player.tx + dx,
+                               self.local_player.ty + dy)
+        return True
+
+    def _set_local_target(self, tx, ty):
+        if self.local_player is None:
+            return
+        tx = min(max(tx, PLAY_LEFT), PLAY_RIGHT)
+        ty = min(max(ty, PLAY_BOTTOM), PLAY_TOP)
+        if self.role == "client":
+            self._last_input = (tx, ty)
+            if self.net is not None:
+                self.net.send_input(tx, ty)
+        else:
+            self.local_player.tx, self.local_player.ty = tx, ty
         return False
 
     # ----- input -----
@@ -523,20 +586,15 @@ class GameScreen(Screen):
             return True
         if not self.active or self.paused or self.local_player is None:
             return False
-        tx = min(max(touch.sx, 0.05), 0.95)
-        ty = min(max(touch.sy, 0.05), 0.95)
-        if self.role == "client":
-            # The client never moves its own sprite; it asks the host to, and the
-            # host's next snapshot moves it on screen.
-            self._last_input = (tx, ty)
-            if self.net is not None:
-                self.net.send_input(tx, ty)
-            return True
-        self.local_player.tx, self.local_player.ty = tx, ty
+        self._set_local_target(touch.sx, touch.sy)
         return True
 
     # ----- main loop -----
     def update(self, dt):
+        # A suspended mobile app or a temporarily stalled desktop window can
+        # produce a very large Clock delta. Never let one frame teleport sprites,
+        # drain the health bar, or consume the whole level timer.
+        dt = min(max(float(dt), 0.0), 0.1)
         # The client does not run the game. It only reads the host's updates and
         # draws them; everything below is for the host or for single player.
         if self.role == "client":
@@ -684,6 +742,9 @@ class GameScreen(Screen):
     def _update_combat_hud(self):
         # The gun button shows the state of the local player's gun.
         who = self.local_player
+        if who is None:
+            self.fire_btn.disabled = True
+            return
         self.fire_btn.ammo = who.ammo
         self.fire_btn.ready = who.cooldown <= 0
         if self.freeze_time > 0:
@@ -698,6 +759,11 @@ class GameScreen(Screen):
             self.fire_btn.reload_fraction = who.reload_time / RELOAD_SECONDS
         else:
             self.fire_btn.reloading = False
+        self.fire_btn.disabled = not (
+            self.active and not self.paused and not who.dead
+            and who.down_time <= 0 and who.ammo > 0 and who.cooldown <= 0
+            and who.reload_time <= 0 and bool(self.monsters)
+        )
 
     def _update_mp_hud(self):
         # Extra two-player readout: both healths, and the coin counts in versus.
@@ -752,7 +818,8 @@ class GameScreen(Screen):
         # On the client, firing is a request to the host; the shot appears when
         # the host's next snapshot arrives.
         if self.role == "client":
-            if self.net is not None:
+            if (self.active and not self.paused and not self.fire_btn.disabled
+                    and self.net is not None):
                 tx, ty = self._last_input
                 self.net.send_input(tx, ty, fire=True)
             return
@@ -1113,8 +1180,10 @@ class GameScreen(Screen):
             if kind == "input" and self.role == "host":
                 p2 = self.player2
                 if p2 is not None and not p2.dead and p2.down_time <= 0:
-                    p2.tx = min(max(float(msg.get("tx", p2.cx)), 0.05), 0.95)
-                    p2.ty = min(max(float(msg.get("ty", p2.cy)), 0.05), 0.95)
+                    p2.tx = net.bounded_float(msg.get("tx"), p2.cx,
+                                              PLAY_LEFT, PLAY_RIGHT)
+                    p2.ty = net.bounded_float(msg.get("ty"), p2.cy,
+                                              PLAY_BOTTOM, PLAY_TOP)
                     if msg.get("fire"):
                         self.fire(shooter=p2)
             elif kind == "state" and self.role == "client":
@@ -1127,11 +1196,21 @@ class GameScreen(Screen):
     def _handle_event(self, msg):
         kind = msg.get("kind")
         if kind == "sfx":
-            kivy.app.App.get_running_app().audio.play_sfx(msg.get("name", ""))
+            name = msg.get("name", "")
+            if isinstance(name, str) and name in SFX_FILES:
+                kivy.app.App.get_running_app().audio.play_sfx(name)
         elif kind == "end":
             data = msg.get("data") or {}
-            self._mp_finish(data.get("title", "Game Over"),
-                            data.get("lines", []), from_host=False)
+            if not isinstance(data, dict):
+                data = {}
+            title = data.get("title", "Game Over")
+            if not isinstance(title, str):
+                title = "Game Over"
+            lines = data.get("lines", [])
+            if not isinstance(lines, list):
+                lines = []
+            lines = [line for line in lines[:8] if isinstance(line, str)]
+            self._mp_finish(title[:120], lines, from_host=False)
 
     def _broadcast_state(self, dt):
         if self.role != "host" or self.net is None or not self.active:
@@ -1172,24 +1251,31 @@ class GameScreen(Screen):
         }
 
     def _apply_snapshot(self, snap):
-        if self.player is None:
+        if self.player is None or not isinstance(snap, dict):
             return
         self._set_sprite(self.player, snap.get("p1"))
         self._set_sprite(self.player2, snap.get("p2"))
-        self._reconcile(self.monsters, snap.get("mon", []),
+        self._reconcile(self.monsters, self._snapshot_rows(snap.get("mon"), 8, 8),
                         lambda: graphics.MonsterSprite(size_hint=MONSTER_SIZE),
                         self._set_monster)
-        self._reconcile(self.hazards, snap.get("haz", []),
+        self._reconcile(self.hazards, self._snapshot_rows(snap.get("haz"), 8, 3),
                         lambda: graphics.Hazard(size_hint=HAZARD_SIZE),
                         self._set_hazard)
-        self._reconcile(self.projectiles, snap.get("prj", []),
+        self._reconcile(self.projectiles, self._snapshot_rows(snap.get("prj"), 32, 2),
                         lambda: graphics.Projectile(size_hint=PROJECTILE_SIZE),
                         self._set_xy)
-        self._reconcile(self.freezers, snap.get("frz", []),
+        self._reconcile(self.freezers, self._snapshot_rows(snap.get("frz"), 8, 2),
                         lambda: graphics.Freezer(size_hint=FREEZER_SIZE),
                         self._set_xy)
         self._apply_coins(snap.get("coins", []))
         self._apply_client_hud(snap.get("hud", {}))
+
+    @staticmethod
+    def _snapshot_rows(value, limit, minimum_length):
+        if not isinstance(value, list):
+            return []
+        return [row for row in value[:limit]
+                if isinstance(row, list) and len(row) >= minimum_length]
 
     def _reconcile(self, sprites, rows, make, setter):
         # Make the list of sprites match the rows from the host: add when there
@@ -1209,33 +1295,49 @@ class GameScreen(Screen):
             place(s)
 
     def _set_sprite(self, p, row):
-        if p is None or not row:
+        if p is None or not isinstance(row, list) or len(row) < 6:
             return
-        p.cx, p.cy = row[0], row[1]
-        p.face_x, p.face_y = row[2], row[3]
+        p.cx = net.bounded_float(row[0], p.cx, PLAY_LEFT, PLAY_RIGHT)
+        p.cy = net.bounded_float(row[1], p.cy, PLAY_BOTTOM, PLAY_TOP)
+        p.face_x = net.bounded_float(row[2], p.face_x, -1.0, 1.0)
+        p.face_y = net.bounded_float(row[3], p.face_y, -1.0, 1.0)
         p.moving = bool(row[4])
         p.dead = bool(row[5])
         place(p)
 
     def _set_monster(self, m, row):
-        m.cx, m.cy = row[0], row[1]
-        m.face_x, m.face_y = row[2], row[3]
-        m.mtype = row[4]
+        if len(row) < 8:
+            return
+        m.cx = net.bounded_float(row[0], m.cx, PLAY_LEFT, PLAY_RIGHT)
+        m.cy = net.bounded_float(row[1], m.cy, PLAY_BOTTOM, PLAY_TOP)
+        m.face_x = net.bounded_float(row[2], m.face_x, -1.0, 1.0)
+        m.face_y = net.bounded_float(row[3], m.face_y, -1.0, 1.0)
+        m.mtype = int(net.bounded_float(row[4], 1, 1, 3))
         m.max_hp = self.level["monster_hp"]
-        m.hp = row[5]
+        m.hp = int(net.bounded_float(row[5], m.max_hp, 0, m.max_hp))
         m.frozen = bool(row[6])
         m.chasing = bool(row[7])
         m.moving = True
 
     def _set_hazard(self, h, row):
-        h.cx, h.cy = row[0], row[1]
-        h.size_factor = row[2]
+        if len(row) < 3:
+            return
+        h.cx = net.bounded_float(row[0], h.cx, PLAY_LEFT, PLAY_RIGHT)
+        h.cy = net.bounded_float(row[1], h.cy, PLAY_BOTTOM, PLAY_TOP)
+        h.size_factor = net.bounded_float(row[2], 1.0, 0.5, 2.0)
 
     def _set_xy(self, s, row):
-        s.cx, s.cy = row[0], row[1]
+        if len(row) < 2:
+            return
+        s.cx = net.bounded_float(row[0], getattr(s, "cx", 0.5),
+                                 PLAY_LEFT, PLAY_RIGHT)
+        s.cy = net.bounded_float(row[1], getattr(s, "cy", 0.5),
+                                 PLAY_BOTTOM, PLAY_TOP)
 
     def _apply_coins(self, remaining):
-        keep = set(remaining)
+        if not isinstance(remaining, list):
+            return
+        keep = {value for value in remaining if isinstance(value, int)}
         for coin in list(self.coins):
             if coin.index not in keep:
                 # The "+N" pop for the client's own pickups is driven by the
@@ -1248,12 +1350,16 @@ class GameScreen(Screen):
                     coin.parent.remove_widget(coin)
 
     def _apply_client_hud(self, hud):
-        if not hud:
+        if not isinstance(hud, dict) or not hud:
             return
-        self.time_left = hud.get("time")
-        self.freeze_time = hud.get("freeze", 0) or 0
-        ammo = hud.get("ammo", 0)
-        reload_left = hud.get("reload", 0) or 0
+        raw_time = hud.get("time")
+        self.time_left = (None if raw_time is None else
+                          net.bounded_float(raw_time, 0.0, 0.0, 3600.0))
+        self.freeze_time = net.bounded_float(hud.get("freeze"), 0.0,
+                                             0.0, FREEZE_DURATION)
+        ammo = int(net.bounded_float(hud.get("ammo"), 0, 0, 20))
+        reload_left = net.bounded_float(hud.get("reload"), 0.0,
+                                        0.0, RELOAD_SECONDS)
         self.fire_btn.ammo = ammo
         self.fire_btn.ready = True
         self.fire_btn.reloading = reload_left > 0
@@ -1266,13 +1372,16 @@ class GameScreen(Screen):
             self.freeze_timer.fraction = self.freeze_time / FREEZE_DURATION
         else:
             self.freeze_timer.opacity = 0
+        self.fire_btn.disabled = not (
+            self.active and ammo > 0 and reload_left <= 0 and bool(self.monsters)
+        )
         # The client controls player 2, so its health bar follows player 2.
-        h2 = hud.get("h2", 100)
+        h2 = int(net.bounded_float(hud.get("h2"), 100, 0, 100))
         if self.player2 is not None:
             self.player2.max_health = 100
             self.player2.health = h2
-        total = hud.get("coins_total", 0)
-        left = hud.get("coins_left", 0)
+        total = int(net.bounded_float(hud.get("coins_total"), 0, 0, 1000))
+        left = int(net.bounded_float(hud.get("coins_left"), 0, 0, total))
         mode = hud.get("mode")
         if mode == "versus":
             self.coin_label.text = "Coins left {}".format(left)
@@ -1281,16 +1390,18 @@ class GameScreen(Screen):
         self.level_label.text = "Level {}".format(self.level["name"])
         self.time_label.text = "" if self.time_left is None else "Time {}".format(int(self.time_left))
         self._update_health_bar()
-        h1 = hud.get("h1", 100)
+        h1 = int(net.bounded_float(hud.get("h1"), 100, 0, 100))
         if mode == "versus":
             self.mp_label.text = "P1 {}%  coins {}    P2 {}%  coins {}".format(
-                h1, hud.get("c1", 0), h2, hud.get("c2", 0))
+                h1, int(net.bounded_float(hud.get("c1"), 0, 0, total)),
+                h2, int(net.bounded_float(hud.get("c2"), 0, 0, total)))
         else:
             self.mp_label.text = "P1 {}%    P2 {}%".format(h1, h2)
         # Pop "+N" for each coin THIS device's player just collected — c1 if we
         # drive player 1, else c2 (the client drives player 2). Only our own.
-        local_collected = (hud.get("c1", 0) if self.local_player is self.player
-                           else hud.get("c2", 0))
+        raw_collected = (hud.get("c1", 0) if self.local_player is self.player
+                         else hud.get("c2", 0))
+        local_collected = int(net.bounded_float(raw_collected, 0, 0, total))
         if local_collected > self._mp_prev_local_collected:
             delta = local_collected - self._mp_prev_local_collected
             self._coin_pop_at_player(delta)
@@ -1312,25 +1423,33 @@ class GameScreen(Screen):
 
     # ----- pause -----
     def _open_pause(self):
-        if not self.active:
+        if not self.active or self._pause_dialog is not None:
             return
         app = kivy.app.App.get_running_app()
         if self.multiplayer:
-            # There is no pausing a 2-player game, so this is a leave button.
-            self.paused = True
-            ui.ConfirmDialog("Leave the game?\nThe other player will be sent back too.",
-                             self._leave_to_menu, yes_text="Leave", no_text="Stay",
-                             on_no=self._resume).open()
+            # Keep the shared match running behind the confirmation; one player
+            # must not be able to freeze the other player's game.
+            dialog = ui.ConfirmDialog(
+                "Leave the game?\nThe other player will be sent back too.",
+                self._leave_to_menu, yes_text="Leave", no_text="Stay")
+            self._show_pause_dialog(dialog)
             return
         self.paused = True
         app.audio.stop_music()  # silence while paused
+        self.auto.stop()
 
         def quit_to_menu():
             self.active = False
             app.go("levelselect")
-        ui.ConfirmDialog("Quit to the level menu?\nThis level's progress is lost.",
-                         quit_to_menu, yes_text="Quit", no_text="Resume",
-                         on_no=self._resume).open()
+        dialog = ui.ConfirmDialog(
+            "Game paused\nQuit to the level menu? This level's progress is lost.",
+            quit_to_menu, yes_text="Quit", no_text="Resume", on_no=self._resume)
+        self._show_pause_dialog(dialog)
+
+    def _show_pause_dialog(self, dialog):
+        self._pause_dialog = dialog
+        dialog.bind(on_dismiss=lambda *_: setattr(self, "_pause_dialog", None))
+        dialog.open()
 
     def _resume(self):
         # Resume play and bring the level music back.
@@ -1339,6 +1458,44 @@ class GameScreen(Screen):
             kivy.app.App.get_running_app().audio.play_level_music(self.level["world"])
             if self.auto_mode:
                 self.auto.start()
+            self._update_combat_hud()
+
+    def suspend_for_background(self):
+        """Stop active work safely when a mobile OS backgrounds the app."""
+        if not self.active:
+            return
+        self.auto.stop()
+        kivy.app.App.get_running_app().audio.stop_music()
+        if self.multiplayer:
+            if self._pause_dialog is not None:
+                dialog = self._pause_dialog
+                self._pause_dialog = None
+                dialog.dismiss(animation=False)
+            if self.net is not None:
+                self.net.send_leave()
+                self.net.stop()
+                self.net = None
+            self.active = False
+            self._background_multiplayer_exit = True
+        else:
+            if self.paused:
+                return
+            self.paused = True
+            self._background_paused = True
+            self._update_combat_hud()
+
+    def restore_from_background(self):
+        if self._background_multiplayer_exit:
+            self._background_multiplayer_exit = False
+            kivy.app.App.get_running_app().go("multiplayer")
+            Clock.schedule_once(
+                lambda _dt: ui.InfoDialog(
+                    "Game ended",
+                    "The multiplayer game was closed while CoinTex was in the background."
+                ).open(), 0)
+        elif self._background_paused:
+            self._background_paused = False
+            self._resume()
 
     # ----- auto play -----
     def _toggle_auto(self):
@@ -1390,6 +1547,7 @@ class CointexApp(kivy.app.App):
         self.sm.add_widget(ui.LevelSelectScreen(name="levelselect"))
         self.sm.add_widget(ui.SettingsScreen(name="settings"))
         self.sm.add_widget(ui.AboutScreen(name="about"))
+        self.sm.add_widget(ui.PrivacyScreen(name="privacy"))
         self.sm.add_widget(ui.TutorialScreen(name="tutorial"))
         self.sm.add_widget(ui.GuideScreen(name="guide"))
         self.sm.add_widget(ui.AutoPlayerScreen(name="autoplayer"))
@@ -1398,7 +1556,71 @@ class CointexApp(kivy.app.App):
         self.sm.add_widget(ui.JoinScreen(name="mpjoin"))
         self.game = GameScreen(name="game")
         self.sm.add_widget(self.game)
+        Window.bind(on_keyboard=self._on_keyboard)
         return self.sm
+
+    def _on_keyboard(self, window, key, *args):
+        # Android's legacy Back event and desktop Escape both arrive as 27. The
+        # Android manifest deliberately keeps this path enabled for API 36 while
+        # Kivy's activity has no predictive-back callback of its own.
+        if key != 27:
+            return False
+        if any(isinstance(child, ModalView) for child in Window.children):
+            return True
+        current = self.sm.current
+        if current == "menu":
+            return False
+        if current == "game":
+            if self.game.active:
+                self.game._open_pause()
+            return True
+        if current == "mphost":
+            self.sm.get_screen("mphost")._leave()
+            return True
+        if current == "mpjoin":
+            self.sm.get_screen("mpjoin")._leave()
+            return True
+        if current == "tutorial":
+            self.sm.get_screen("tutorial")._finish()
+            return True
+        parent = {
+            "worldmap": "menu",
+            "levelselect": "worldmap",
+            "settings": "menu",
+            "about": "menu",
+            "privacy": "about",
+            "guide": "menu",
+            "autoplayer": "settings",
+            "multiplayer": "menu",
+        }.get(current)
+        if parent:
+            self.go(parent)
+        return True
+
+    def on_pause(self):
+        if getattr(self, "sm", None) is not None and self.sm.current == "game":
+            self.game.suspend_for_background()
+        elif getattr(self, "audio", None) is not None:
+            self.audio.stop_music()
+        return True
+
+    def on_resume(self):
+        if getattr(self, "sm", None) is None:
+            return
+        if self.sm.current == "game":
+            self.game.restore_from_background()
+        elif getattr(self, "audio", None) is not None:
+            self.audio.play_menu_music()
+
+    def on_stop(self):
+        Window.unbind(on_keyboard=self._on_keyboard)
+        if getattr(self, "state", None) is not None:
+            self.state.save()
+        if getattr(self, "audio", None) is not None:
+            self.audio.stop_music()
+        if getattr(self, "game", None) is not None and self.game.net is not None:
+            self.game.net.stop()
+            self.game.net = None
 
     def go(self, name):
         self.sm.current = name

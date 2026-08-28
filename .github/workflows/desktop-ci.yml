@@ -58,4 +58,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
           XDG_CONFIG_HOME: /tmp/cointex-smoke-data
         run: |
-          xvfb-run -a timeout 15 python tools/smoke_test_app.py
+          # Software OpenGL initialization can take more than 15 seconds on a
+          # busy hosted runner. The smoke script still stops itself promptly
+          # once its checks finish; this is only a deadlock guard.
+          xvfb-run -a timeout 30 python tools/smoke_test_app.py

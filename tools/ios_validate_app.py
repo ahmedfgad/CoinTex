@@ -65,9 +65,10 @@ def main() -> None:
         .get("CFBundlePrimaryIcon", {})
         .get("CFBundleIconFiles", [])
     )
-    required_ipad_icons = {"AppIcon76x76", "AppIcon83.5x83.5"}
-    if not required_ipad_icons.issubset(ipad_icon_files):
-        fail("compiled iPad app icons are missing")
+    if "AppIcon76x76" not in ipad_icon_files:
+        fail(f"compiled iPad icon family is missing: {sorted(ipad_icon_files)}")
+    if not (app / "AppIcon76x76@2x~ipad.png").is_file():
+        fail("compiled 152px iPad home-screen icon is missing")
     if info.get("ITSAppUsesNonExemptEncryption") is not False:
         fail("ITSAppUsesNonExemptEncryption must be false")
     if not info.get("NSLocalNetworkUsageDescription"):

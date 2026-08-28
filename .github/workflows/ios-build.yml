@@ -1,4 +1,4 @@
-# Builds an unsigned CoinTex iPhone app and a portable Xcode project.
+# Builds an unsigned universal CoinTex iPhone/iPad app and a portable Xcode project.
 #
 # This workflow deliberately has no Apple credentials. Its Release build is
 # validated against the same metadata, privacy manifest, icons, iOS 26 SDK and
@@ -143,7 +143,7 @@ jobs:
           {
             echo "## CoinTex iOS build"
             echo
-            echo "The Release app passed bundle, SDK 26, arm64, privacy-manifest, metadata and icon-catalog checks."
+            echo "The universal iPhone/iPad Release app passed bundle, SDK 26, arm64, privacy-manifest, metadata and icon-catalog checks."
             echo
             echo "- **CoinTex-unsigned-ipa** is for sideload testing only."
             echo "- **CoinTex-xcode-project** is portable and can be opened on a Mac for device testing and Xcode-managed signing."

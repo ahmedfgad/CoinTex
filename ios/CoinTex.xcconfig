@@ -12,9 +12,9 @@ MARKETING_VERSION = 1.4.1
 CURRENT_PROJECT_VERSION = 10401
 IPHONEOS_DEPLOYMENT_TARGET = 15.0
 
-// The first App Store release is intentionally iPhone-only. It can still be
-// offered as an iPhone app on Apple-silicon Macs through App Store Connect.
-TARGETED_DEVICE_FAMILY = 1
+// Ship one adaptive iOS app for both iPhone and iPad. App Store Connect can
+// also offer it on Apple-silicon Macs after compatibility testing.
+TARGETED_DEVICE_FAMILY = 1,2
 SUPPORTS_MACCATALYST = NO
 SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES
 

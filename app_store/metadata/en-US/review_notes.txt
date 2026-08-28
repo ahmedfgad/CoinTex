@@ -1,6 +1,6 @@
 CoinTex requires no account, login, purchase, or external hardware. The complete single-player game, tutorial, guide, and Auto Player can be reviewed offline.
 
-The app is landscape-only and targets iPhone. To see the privacy policy, open About from the main menu and tap Privacy Policy.
+The app is landscape-only and supports iPhone and iPad. To see the privacy policy, open About from the main menu and tap Privacy Policy.
 
 Multiplayer is optional and requires a second CoinTex device. Choosing Host Game requests Local Network permission, opens a direct peer-to-peer listener, and shows a same-Wi-Fi address. The screen also retrieves the host's public IPv4 address from api.ipify.org over verified HTTPS for optional advanced internet play. No developer server routes or stores gameplay messages.
 

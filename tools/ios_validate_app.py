@@ -48,10 +48,18 @@ def main() -> None:
     }
     for key, value in expected.items():
         if str(info.get(key)) != value:
-            fail("{} is {!r}, expected {!r}".format(key, info.get(key), value))
+            fail(f"{key} is {info.get(key)!r}, expected {value!r}")
 
-    if info.get("UIDeviceFamily") != [1]:
-        fail("UIDeviceFamily must be iPhone-only ([1]) for this release")
+    if info.get("UIDeviceFamily") != [1, 2]:
+        fail("UIDeviceFamily must include iPhone and iPad ([1, 2])")
+    landscape = {
+        "UIInterfaceOrientationLandscapeLeft",
+        "UIInterfaceOrientationLandscapeRight",
+    }
+    if set(info.get("UISupportedInterfaceOrientations", [])) != landscape:
+        fail("iPhone orientations must be landscape-only")
+    if set(info.get("UISupportedInterfaceOrientations~ipad", [])) != landscape:
+        fail("iPad orientations must be landscape-only")
     if info.get("ITSAppUsesNonExemptEncryption") is not False:
         fail("ITSAppUsesNonExemptEncryption must be false")
     if not info.get("NSLocalNetworkUsageDescription"):
@@ -85,7 +93,7 @@ def main() -> None:
             check=True,
         )
 
-    print("Validated {} {} ({}) for iPhone; SDK {}".format(
+    print("Validated {} {} ({}) for iPhone and iPad; SDK {}".format(
         info["CFBundleIdentifier"], info["CFBundleShortVersionString"],
         info["CFBundleVersion"], info["DTSDKName"],
     ))

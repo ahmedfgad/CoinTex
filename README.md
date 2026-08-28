@@ -1,6 +1,6 @@
 # CoinTex
 
-CoinTex is a top down arcade game written entirely in Python with the [Kivy](https://kivy.org) framework. You move a character around each level to collect all the coins before the timer runs out, while dodging monsters and fire and shooting your way through. It runs from the same code on Windows, Linux, macOS, Android and iPhone.
+CoinTex is a top down arcade game written entirely in Python with the [Kivy](https://kivy.org) framework. You move a character around each level to collect all the coins before the timer runs out, while dodging monsters and fire and shooting your way through. It runs from the same code on Windows, Linux, macOS, Android, iPhone and iPad.
 
 Every screen, all of the graphics and all of the sound are generated in code, so the project has no image or audio asset files to ship beyond a handful of short sounds.
 
@@ -28,9 +28,9 @@ Every screen, all of the graphics and all of the sound are generated in code, so
 
 CoinTex is on Google Play: https://play.google.com/store/apps/details?id=coin.tex.cointexreactfast
 
-### iPhone
+### iPhone and iPad
 
-There is no App Store listing yet. You can build the iPhone app yourself for free with GitHub Actions and install it on your phone. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md) to produce the app file and [IOS_INSTALL.md](IOS_INSTALL.md) to install it on an iPhone.
+There is no App Store listing yet. You can build the iOS app yourself for free with GitHub Actions and install it on your device. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md) to produce the app file and [IOS_INSTALL.md](IOS_INSTALL.md) to install it on an iPhone or iPad.
 
 ### Windows, Linux and macOS
 
@@ -157,11 +157,11 @@ The Android app is built with [Buildozer](https://github.com/kivy/buildozer) usi
 
 It produces an `.aab` for Google Play and an `.apk` for testing in the `bin` folder. Both are checked for the required ABIs and 16 KB alignment of every 64-bit native library; the APK is also checked for target API 36. Signing the release is described in [SIGNING.md](SIGNING.md).
 
-### iPhone and the App Store
+### iPhone, iPad and the App Store
 
 iOS apps must be built with Xcode on macOS. You do not need to own a Mac: the GitHub Actions workflow at `.github/workflows/ios-build.yml` uses a macOS runner to create a validated unsigned test IPA and portable Xcode project. The separate protected workflow at `.github/workflows/ios-app-store.yml` creates the signed App Store archive only after Apple credentials are configured. See [IOS_BUILD_WORKFLOW.md](IOS_BUILD_WORKFLOW.md) for builds and [APP_STORE_SUBMISSION.md](APP_STORE_SUBMISSION.md) for publishing.
 
-The first store release targets iPhone. App Store Connect can also offer that same iPhone app on Apple-silicon Macs; it is not a native macOS build and does not run on Intel Macs. The PyInstaller macOS desktop app remains a separate artifact.
+The first store release targets iPhone and iPad. App Store Connect can also offer that same iOS app on Apple-silicon Macs; it is not a native macOS build and does not run on Intel Macs. The PyInstaller macOS desktop app remains a separate artifact.
 
 ### Desktop (Windows, Linux, macOS)
 
@@ -189,7 +189,7 @@ If the built program shows a black window on a machine with no working sound out
 | `autoplay.py` | The in game genetic algorithm Auto Player. |
 | `tools/` | Scripts that generate the sounds and render the sprite preview. |
 | `ios/` | App Store identity, release settings and privacy manifest. |
-| `app_store/` | Prepared App Store metadata and iPhone screenshots. |
+| `app_store/` | Prepared App Store metadata and iPhone/iPad screenshots. |
 | `android/` | Extra Android 16 manifest application attributes. |
 | `tests/` | Save, networking and Android artifact regression tests. |
 | `PlayerGA/` | The research version of the player that searches with PyGAD. |

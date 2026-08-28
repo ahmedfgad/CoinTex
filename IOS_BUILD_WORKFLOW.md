@@ -1,4 +1,4 @@
-# Building CoinTex for iPhone
+# Building CoinTex for iPhone and iPad
 
 CoinTex has two separate GitHub Actions workflows:
 
@@ -22,7 +22,7 @@ The single source of truth is `ios/CoinTex.xcconfig`:
 - Marketing version: `1.4.1`
 - Build number: `10401`
 - Minimum version: iOS 15
-- Device family: iPhone
+- Device family: iPhone and iPad
 
 Every replacement uploaded to App Store Connect needs a new
 `CURRENT_PROJECT_VERSION`. Do not change the bundle ID after creating the
@@ -48,7 +48,7 @@ generation.
 Before artifacts are uploaded, the workflow verifies:
 
 - iOS 26 SDK and arm64 executable;
-- iPhone-only device family and iOS 15 deployment target;
+- universal iPhone/iPad device family and iOS 15 deployment target;
 - bundle ID, marketing version, and build number;
 - opaque compiled app-icon catalog and launch storyboard;
 - Local Network purpose text and exempt-encryption declaration;
@@ -69,7 +69,7 @@ kivy-ios distribution, and creates `cointex-ios/cointex.xcodeproj`. It does
 not sign or upload the app.
 
 Open the project, select your Apple Developer team under **Signing &
-Capabilities**, and run the Release app on a real iPhone. For the App Store,
+Capabilities**, and run the Release app on real iPhone and iPad hardware. For the App Store,
 archive and distribute it through Organizer, or use the protected signed
 workflow.
 
@@ -100,4 +100,4 @@ Normal public releases never call this signed workflow.
 - If Apple rejects a reused build number, increment
   `CURRENT_PROJECT_VERSION` in `ios/CoinTex.xcconfig` and build again.
 - A successful compile is not the end of release testing. Use the exact
-  uploaded build in TestFlight on a real iPhone before submission.
+  uploaded build in TestFlight on a real iPhone and iPad before submission.

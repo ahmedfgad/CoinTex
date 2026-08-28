@@ -31,6 +31,10 @@ def configure_plist(plist_path: Path, settings: dict[str, str]) -> None:
     with plist_path.open("rb") as handle:
         info = plistlib.load(handle)
 
+    landscape_orientations = [
+        "UIInterfaceOrientationLandscapeLeft",
+        "UIInterfaceOrientationLandscapeRight",
+    ]
     info.update({
         "CFBundleDisplayName": settings["APP_DISPLAY_NAME"],
         "CFBundleName": settings["PRODUCT_NAME"],
@@ -46,12 +50,9 @@ def configure_plist(plist_path: Path, settings: dict[str, str]) -> None:
         "UILaunchStoryboardName": "Launch Screen",
         "UIRequiredDeviceCapabilities": ["arm64"],
         "UIStatusBarHidden": True,
-        "UISupportedInterfaceOrientations": [
-            "UIInterfaceOrientationLandscapeLeft",
-            "UIInterfaceOrientationLandscapeRight",
-        ],
+        "UISupportedInterfaceOrientations": landscape_orientations,
+        "UISupportedInterfaceOrientations~ipad": landscape_orientations,
     })
-    info.pop("UISupportedInterfaceOrientations~ipad", None)
     info.pop("NSAppTransportSecurity", None)
 
     with plist_path.open("wb") as handle:
@@ -149,8 +150,7 @@ def main() -> None:
     privacy_path = args.privacy.resolve()
     app_source = args.app_source.resolve()
     if not (app_source / "main.py").is_file():
-        raise SystemExit("Staged app source is missing main.py: {}".format(
-            app_source))
+        raise SystemExit(f"Staged app source is missing main.py: {app_source}")
     settings = read_xcconfig(config_path)
     required = {
         "APP_DISPLAY_NAME", "PRODUCT_NAME", "PRODUCT_BUNDLE_IDENTIFIER",

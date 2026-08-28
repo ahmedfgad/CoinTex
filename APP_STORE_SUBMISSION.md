@@ -1,6 +1,6 @@
 # Publishing CoinTex on Apple's App Store
 
-The repository is configured for an iPhone App Store release with bundle ID
+The repository is configured for a universal iPhone and iPad App Store release with bundle ID
 `coin.tex.cointexreactfast`, marketing version `1.4.1`, build `10401`, minimum
 iOS 15, and the iOS 26 SDK. Release identity and version values live in
 [`ios/CoinTex.xcconfig`](ios/CoinTex.xcconfig).
@@ -13,8 +13,9 @@ No certificate, provisioning profile, API key, or password belongs in Git.
   `.github/workflows/ios-build.yml`.
 - A manual, credential-gated signed archive/export/upload pipeline in
   `.github/workflows/ios-app-store.yml`.
-- App Store metadata in `app_store/metadata/en-US/` and 2796x1290 iPhone
-  screenshots in `app_store/screenshots/iphone_6_9/`.
+- App Store metadata in `app_store/metadata/en-US/`, 2688x1242 iPhone
+  screenshots in `app_store/screenshots/iphone/`, and 2752x2064 iPad
+  screenshots in `app_store/screenshots/ipad/`.
 - An opaque 1024px App Store icon, launch storyboard, landscape orientations,
   Local Network purpose text, export-compliance declaration, and privacy
   manifest generated into the Xcode project.
@@ -76,7 +77,7 @@ ad-hoc profile, belongs to the configured Team ID, and matches the bundle ID.
 1. Run **Build iOS app** first. It uses no secrets and proves that the current
    source builds with Xcode/iOS SDK 26. Download the portable Xcode project if
    you want to run it directly from Xcode.
-2. Test the Release app on at least one real iPhone. Exercise first launch,
+2. Test the Release app on at least one real iPhone and one real iPad. Exercise first launch,
    audio, saving/resetting progress, landscape rotation, tutorial, gameplay,
    background/foreground transitions, and the Local Network allow/deny paths.
 3. Run **Build signed iOS App Store app** with upload disabled. This exports the
@@ -122,17 +123,17 @@ SoundFont whose license is documented.
 
 ## Mac availability
 
-This release targets iPhone, not iPad or Mac Catalyst. App Store Connect can
-still offer the unmodified iPhone app to users of Apple-silicon Macs. In
+This release targets iPhone and iPad, but not Mac Catalyst. App Store Connect can
+also offer the unmodified iOS app to users of Apple-silicon Macs. In
 **Pricing and Availability > iPhone and iPad Apps on Apple Silicon Mac**, leave
 **Make this app available** selected only after testing the TestFlight build on
-an Apple-silicon Mac. That version is the iPhone app running in Apple's
+an Apple-silicon Mac. That version is the iPhone/iPad app running in Apple's
 compatibility environment; it is not a native macOS app and will not support
 Intel Macs.
 
 The repository's PyInstaller `CoinTex.app` is a separate native desktop build.
 Publishing that as a macOS App Store platform would require a separate Xcode
-packaging/signing sandbox-entitlement effort. It is not included in this iPhone
+packaging/signing sandbox-entitlement effort. It is not included in this iOS
 submission.
 
 ## Current Apple requirements used here

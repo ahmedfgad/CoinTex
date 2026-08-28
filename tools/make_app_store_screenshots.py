@@ -1,9 +1,9 @@
-"""Create Apple's 6.9-inch landscape screenshot set from CoinTex captures.
+"""Create App Store screenshot sets for iPhone and iPad.
 
-The game captures are 16:9. Current iPhones are wider, so this keeps every UI
-element visible at its original aspect ratio and extends the edge colours into
-the narrow side areas. Outputs are opaque RGB PNGs at Apple's accepted
-2796x1290 landscape size.
+The checked-in captures are real 16:9 CoinTex screens. Each image is scaled to
+fit without cropping or distortion, then its edge colours are extended into
+any remaining area. Outputs are opaque RGB PNGs at exact App Store Connect
+sizes supplied for this release.
 """
 
 from __future__ import annotations
@@ -12,41 +12,61 @@ from pathlib import Path
 
 from PIL import Image
 
-
 SOURCE = Path("cointex_media/tablet_screenshots")
-DESTINATION = Path("app_store/screenshots/iphone_6_9")
-TARGET = (2796, 1290)
+DESTINATION = Path("app_store/screenshots")
+TARGETS = {
+    "iphone": (2688, 1242),
+    "ipad": (2752, 2064),
+}
+
+
+def fit_with_extended_edges(screenshot: Image.Image,
+                            target: tuple[int, int]) -> Image.Image:
+    """Fit a screenshot inside target and extend its outermost pixels."""
+    scale = min(target[0] / screenshot.width, target[1] / screenshot.height)
+    size = (round(screenshot.width * scale), round(screenshot.height * scale))
+    resized = screenshot.resize(size, Image.Resampling.LANCZOS)
+    left = (target[0] - size[0]) // 2
+    top = (target[1] - size[1]) // 2
+    right = target[0] - size[0] - left
+    bottom = target[1] - size[1] - top
+
+    canvas = Image.new("RGB", target)
+    canvas.paste(resized, (left, top))
+    if left:
+        edge = resized.crop((0, 0, 1, size[1])).resize((left, size[1]))
+        canvas.paste(edge, (0, top))
+    if right:
+        edge = resized.crop((size[0] - 1, 0, size[0], size[1]))
+        canvas.paste(edge.resize((right, size[1])), (left + size[0], top))
+    if top:
+        edge = canvas.crop((0, top, target[0], top + 1))
+        canvas.paste(edge.resize((target[0], top)), (0, 0))
+    if bottom:
+        edge = canvas.crop((0, top + size[1] - 1,
+                            target[0], top + size[1]))
+        canvas.paste(edge.resize((target[0], bottom)),
+                     (0, top + size[1]))
+    return canvas
 
 
 def main() -> None:
     sources = sorted(SOURCE.glob("*.png"))
     if not sources:
-        raise SystemExit("No screenshots found in {}".format(SOURCE))
-    DESTINATION.mkdir(parents=True, exist_ok=True)
-    resampling = getattr(Image, "Resampling", Image).LANCZOS
+        raise SystemExit(f"No screenshots found in {SOURCE}")
+    if len(sources) > 10:
+        raise SystemExit("App Store screenshot sets cannot exceed 10 images")
 
-    for source in sources:
-        screenshot = Image.open(source).convert("RGB")
-        width = round(screenshot.width * TARGET[1] / screenshot.height)
-        resized = screenshot.resize((width, TARGET[1]), resampling)
-        if width > TARGET[0]:
-            raise SystemExit("{} is wider than the target".format(source))
-
-        left = (TARGET[0] - width) // 2
-        right = TARGET[0] - width - left
-        canvas = Image.new("RGB", TARGET)
-        if left:
-            left_edge = resized.crop((0, 0, 1, TARGET[1]))
-            canvas.paste(left_edge.resize((left, TARGET[1])), (0, 0))
-        canvas.paste(resized, (left, 0))
-        if right:
-            right_edge = resized.crop((width - 1, 0, width, TARGET[1]))
-            canvas.paste(right_edge.resize((right, TARGET[1])),
-                         (left + width, 0))
-
-        output = DESTINATION / source.name
-        canvas.save(output, "PNG", optimize=True)
-        print("{} -> {} ({}x{})".format(source, output, *TARGET))
+    for device, target in TARGETS.items():
+        destination = DESTINATION / device
+        destination.mkdir(parents=True, exist_ok=True)
+        for source in sources:
+            with Image.open(source) as image:
+                screenshot = image.convert("RGB")
+            canvas = fit_with_extended_edges(screenshot, target)
+            output = destination / source.name
+            canvas.save(output, "PNG", optimize=True)
+            print("{} -> {} ({}x{})".format(source, output, *target))
 
 
 if __name__ == "__main__":

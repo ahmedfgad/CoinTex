@@ -1,8 +1,8 @@
 # CoinTex 1.4.1
 
-CoinTex is a top-down arcade game written entirely in Python with [Kivy](https://kivy.org). Move your character around each level to collect all the coins before the timer runs out, while dodging monsters and fire and shooting your way through. The same Python codebase runs on Windows, macOS, Linux, Android and iPhone, and every screen and all of the graphics are drawn in code.
+CoinTex is a top-down arcade game written entirely in Python with [Kivy](https://kivy.org). Move your character around each level to collect all the coins before the timer runs out, while dodging monsters and fire and shooting your way through. The same Python codebase runs on Windows, macOS, Linux, Android, iPhone and iPad, and every screen and all of the graphics are drawn in code.
 
-This patch release updates the Android packaging configuration for Google Play's Android 16 requirement, prepares the iPhone App Store release path, and includes a cross-platform usability and reliability pass.
+This patch release updates the Android packaging configuration for Google Play's Android 16 requirement, prepares the iPhone/iPad App Store release path, and includes a cross-platform usability and reliability pass.
 
 ## What's new in 1.4.1
 
@@ -15,7 +15,7 @@ This patch release updates the Android packaging configuration for Google Play's
 - Save loading now recovers safely from truncated or malformed values, and peer messages/coordinates are bounded before reaching the game loop.
 - Settings show an exact volume percentage and confirm when campaign progress has been reset.
 - The Auto Player sends movement changes through Kivy's main thread, and transient visual effects are cleaned up between levels.
-- An App Store-ready iPhone project path now includes current Xcode/iOS SDK checks, metadata, screenshots, privacy declarations, protected signing automation, and local archive validation.
+- An App Store-ready iPhone/iPad project path now includes current Xcode/iOS SDK checks, metadata, screenshots, privacy declarations, protected signing automation, and local archive validation.
 
 ## What's new in 1.4
 
@@ -44,8 +44,8 @@ This patch release updates the Android packaging configuration for Google Play's
 - Windows (`CoinTex-windows.exe`): download and run. SmartScreen may warn on an unsigned app; choose "More info" then "Run anyway".
 - macOS (`CoinTex-macos.zip`): unzip and open CoinTex.app. On first launch, right-click the app and choose Open to get past Gatekeeper.
 - Linux (`CoinTex-linux`): run `chmod +x CoinTex-linux`, then start it. It is a single self-contained file.
-- iPhone (`CoinTex-unsigned.ipa`): sideload with [AltStore](https://altstore.io) or Sideloadly, which re-sign it with your own Apple ID. See IOS_INSTALL.md.
-- iPhone, Xcode (`CoinTex-xcode-project.zip`): a portable, App Store-configured project. Open it on a Mac, select your team, and test it on a real iPhone.
+- iPhone/iPad (`CoinTex-unsigned.ipa`): sideload with [AltStore](https://altstore.io) or Sideloadly, which re-sign it with your own Apple ID. See IOS_INSTALL.md.
+- iPhone/iPad, Xcode (`CoinTex-xcode-project.zip`): a portable, App Store-configured project. Open it on a Mac, select your team, and test it on real iPhone and iPad hardware.
 
 The official Apple App Store release is being prepared separately. It requires the Apple Developer account, private distribution credentials, TestFlight testing, and App Review; the signed IPA is never attached to a normal public build by default.
 

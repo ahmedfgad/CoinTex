@@ -76,7 +76,7 @@ On a machine with no audio output, start with `SDL_AUDIODRIVER=dummy python main
 
 ## Notes
 
-- The Android `.apk` is signed with the current CoinTex release key; debug builds are not published. The iOS `.ipa` is unsigned, so it contains no Apple signing credentials.
+- The Android APK uses the same upload certificate as CoinTex 1.4; debug and mismatched-key builds are not published. The iOS `.ipa` is unsigned, so it contains no Apple signing credentials.
 - Every artifact is reproducible: `./build_desktop.sh` for Windows, macOS and Linux; `./build_android.sh` for a signed Android release; and the iOS GitHub Actions workflow.
 
 A Python and Kivy game by Ahmed Gad.

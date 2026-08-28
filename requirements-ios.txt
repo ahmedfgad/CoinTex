@@ -5,7 +5,7 @@ kivy-ios==2025.5.17
 Cython==0.29.36
 pbxproj==3.5.0
 cookiecutter==2.1.1
-sh==1.12.14
+sh==2.2.4
 
 # Installed into the packaged Python distribution with `toolchain pip`; this
 # pin is also read by the local and GitHub Actions build scripts.

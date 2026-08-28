@@ -3,10 +3,17 @@
 This document covers Android signing. Apple signing uses unrelated Apple
 certificates and provisioning profiles; see [APP_STORE_SUBMISSION.md](APP_STORE_SUBMISSION.md).
 
-CoinTex (`coin.tex.cointexreactfast`) was published a long time ago and the
-original signing key is lost. Whether the existing app on Google Play can still
-be updated depends on one setting in the Play Console. This file explains how to
-check it and what to do in each case.
+CoinTex (`coin.tex.cointexreactfast`) uses Google Play App Signing. Its upload
+key is kept outside this public repository and referenced by the private `.env`
+file. This document records the expected certificate and the recovery options
+if that key becomes unavailable.
+
+Google Play currently expects the upload certificate with SHA-1 fingerprint
+`C6:81:B6:85:58:91:82:C4:5C:72:F6:95:71:67:A3:E8:75:AF:63:39`. The public
+CoinTex 1.4 APK and current release key use that certificate. The matching
+private key is deliberately not in this repository. `build_android.sh` verifies
+the fingerprint before starting a release build and refuses to create an AAB
+with a different key.
 
 ## Step 1: check if the app uses Play App Signing
 
@@ -24,8 +31,7 @@ There are two possible cases:
 
 ## Step 2A: Play App Signing is on
 
-The lost key was only the upload key, so you can make a new one and ask Google to
-switch to it.
+If the upload key is lost, you can make a new one and ask Google to switch to it.
 
 1. Create the new upload key and its certificate:
 
@@ -44,6 +50,10 @@ switch to it.
 5. From then on sign every upload with `cointex-upload.keystore`. The build script
    already does this. Upload the .aab from the bin folder as a new release. It
    stays the same app, same listing, same users.
+
+6. Replace `EXPECTED_UPLOAD_SHA1` in `build_android.sh` with the SHA-1 shown for
+   the new upload certificate in Play Console. Do this only after Google has
+   confirmed the reset.
 
 The app signing key held by Google does not change, so people who already have the
 app keep getting updates as normal.
@@ -74,10 +84,11 @@ in recent years use Play App Signing, which puts you in the easier Step 2A case.
 
 ## Keep your keys safe
 
-The build script creates and reuses two private files, both ignored by git:
+The build script uses two private files, both ignored by git:
 
-- `cointex-upload.keystore` is the upload key.
-- `.env` holds the keystore password and alias.
+- `cointex-upload.keystore` is the default upload-key location. Set
+  `KEYSTORE_PATH` in `.env` when the key is stored elsewhere.
+- `.env` holds the keystore password, alias and optional key path.
 
 Back up both of them in a safe place, such as a password manager or an encrypted
 drive. Do not commit them. They are already listed in `.gitignore`.

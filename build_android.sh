@@ -43,6 +43,10 @@ VENV_DIR="venv"
 KEYSTORE_FILE="$PROJECT_DIR/cointex-upload.keystore"
 KEYSTORE_ALIAS="cointex-upload"
 ENV_FILE="$PROJECT_DIR/.env"
+# Google Play currently expects this upload certificate. Keeping the public
+# fingerprint here prevents a locally generated or unrelated key from producing
+# an AAB that looks valid but cannot be uploaded to the existing app.
+EXPECTED_UPLOAD_SHA1="C681B685589182C45C72F6957167A3E875AF6339"
 
 # Make sure the venv and buildozer are ready.
 if [[ ! -d "$VENV_DIR" ]]; then
@@ -90,6 +94,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 # shellcheck disable=SC1091
 source "$ENV_FILE"
+KEYSTORE_FILE="${KEYSTORE_PATH:-$KEYSTORE_FILE}"
 
 if [[ ! -f "$KEYSTORE_FILE" ]]; then
     echo "Creating the upload keystore: $KEYSTORE_FILE"
@@ -100,16 +105,37 @@ if [[ ! -f "$KEYSTORE_FILE" ]]; then
         -storepass "$KEYSTORE_PASSWORD" -keypass "$KEYSTORE_PASSWORD" \
         -dname "CN=Ahmed Gad, OU=CoinTex, O=CoinTex, L=Unknown, ST=Unknown, C=US"
 
-    echo "Exporting upload_certificate.pem for Play Console"
-    keytool -export -rfc \
-        -keystore "$KEYSTORE_FILE" \
-        -alias "$KEYSTORE_ALIAS" \
-        -storepass "$KEYSTORE_PASSWORD" \
-        -file "$PROJECT_DIR/upload_certificate.pem"
-
     echo "Back up cointex-upload.keystore and .env now. Without them you cannot"
     echo "sign new uploads. See SIGNING.md for details."
 fi
+
+ACTUAL_UPLOAD_SHA1="$(
+    keytool -exportcert \
+        -keystore "$KEYSTORE_FILE" \
+        -alias "$KEYSTORE_ALIAS" \
+        -storepass "$KEYSTORE_PASSWORD" 2>/dev/null \
+        | openssl dgst -sha1 -r | awk '{print toupper($1)}'
+)"
+
+# Export even a replacement candidate before enforcing the recorded Play
+# fingerprint. This gives the owner the PEM needed for an upload-key reset,
+# while the mismatch guard still prevents an unusable AAB from being built.
+keytool -export -rfc \
+    -keystore "$KEYSTORE_FILE" \
+    -alias "$KEYSTORE_ALIAS" \
+    -storepass "$KEYSTORE_PASSWORD" \
+    -file "$PROJECT_DIR/upload_certificate.pem" >/dev/null
+
+if [[ "$ACTUAL_UPLOAD_SHA1" != "$EXPECTED_UPLOAD_SHA1" ]]; then
+    echo "Refusing to build with the wrong Google Play upload key." >&2
+    echo "Expected SHA-1: $EXPECTED_UPLOAD_SHA1" >&2
+    echo "Actual SHA-1:   $ACTUAL_UPLOAD_SHA1" >&2
+    echo "Restore the matching CoinTex key or complete an upload-key reset." >&2
+    echo "The reset certificate is upload_certificate.pem." >&2
+    echo "See SIGNING.md for the recovery steps." >&2
+    exit 1
+fi
+echo "Verified the Google Play upload certificate: $ACTUAL_UPLOAD_SHA1"
 
 # Pass the keystore to python-for-android. The key password is the same as the
 # store password because the keystore is in PKCS12 format.

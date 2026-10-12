@@ -62,11 +62,30 @@ jobs:
           test -n "$ANDROID_UPLOAD_KEYSTORE_ALIAS" || { echo "Missing ANDROID_UPLOAD_KEYSTORE_ALIAS" >&2; exit 1; }
           printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > cointex-upload.keystore
           chmod 600 cointex-upload.keystore
+          if keytool -certreq -keystore cointex-upload.keystore \
+            -alias "$ANDROID_UPLOAD_KEYSTORE_ALIAS" \
+            -storepass "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_UPLOAD_KEY_PASSWORD" \
+            -file "$RUNNER_TEMP/cointex-key-check.csr" >/dev/null 2>&1; then
+            KEY_PASSWORD="$ANDROID_UPLOAD_KEY_PASSWORD"
+            echo "Verified the supplied upload key password."
+          elif keytool -certreq -keystore cointex-upload.keystore \
+            -alias "$ANDROID_UPLOAD_KEYSTORE_ALIAS" \
+            -storepass "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            -file "$RUNNER_TEMP/cointex-key-check.csr" >/dev/null 2>&1; then
+            KEY_PASSWORD="$ANDROID_UPLOAD_KEYSTORE_PASSWORD"
+            echo "Verified that the upload key uses the keystore password."
+          else
+            echo "Could not unlock the upload-key entry with either configured password." >&2
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/cointex-key-check.csr"
           {
             printf 'KEYSTORE_PATH=%q\n' "$GITHUB_WORKSPACE/cointex-upload.keystore"
             printf 'KEYSTORE_ALIAS=%q\n' "$ANDROID_UPLOAD_KEYSTORE_ALIAS"
             printf 'KEYSTORE_PASSWORD=%q\n' "$ANDROID_UPLOAD_KEYSTORE_PASSWORD"
-            printf 'KEYSTORE_KEY_PASSWORD=%q\n' "$ANDROID_UPLOAD_KEY_PASSWORD"
+            printf 'KEYSTORE_KEY_PASSWORD=%q\n' "$KEY_PASSWORD"
           } > .env
           chmod 600 .env
 

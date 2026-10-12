@@ -1,0 +1,58 @@
+# Renders the original CoinTex compositions with the documented FluidR3 GM bank.
+# No SoundFont or other third-party media is uploaded; only the resulting WAVs
+# are retained as a short-lived workflow artifact for review and replacement.
+
+name: Render licensed CoinTex soundtrack
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FluidR3 and FluidSynth
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fluidsynth fluid-soundfont-gm
+          fluidsynth --version
+          dpkg-query -W -f='${Version}\n' fluid-soundfont-gm
+
+      - name: Render original compositions
+        run: |
+          python -m pip install numpy==2.4.4
+          python tools/gen_world_music_sf2.py \
+            --soundfont /usr/share/sounds/sf2/FluidR3_GM.sf2
+          python - <<'PY'
+          from pathlib import Path
+          import wave
+
+          paths = sorted(Path("music").glob("bg_music_*.wav"))
+          if len(paths) != 7:
+              raise SystemExit(f"Expected 7 music tracks, found {len(paths)}")
+          for path in paths:
+              with wave.open(str(path), "rb") as wav:
+                  if wav.getnchannels() != 1 or wav.getsampwidth() != 2 or wav.getframerate() != 44100:
+                      raise SystemExit(f"Unexpected WAV format: {path}")
+                  print(f"{path}: {wav.getnframes() / wav.getframerate():.1f}s")
+          PY
+
+      - name: Upload rendered WAVs
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoinTex-FluidR3-music
+          path: music/bg_music_*.wav
+          if-no-files-found: error
+          retention-days: 3

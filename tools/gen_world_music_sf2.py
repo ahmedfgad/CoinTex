@@ -12,9 +12,10 @@ Pipeline per track:
   4. downmix to mono, fold the reverb tail back onto the head for a seamless
      loop, normalize, and write a 16-bit mono WAV into music/.
 
-Dev/build-time only. Requires the `fluidsynth` binary and a GM soundfont
-(default: /usr/share/sounds/sf2/default-GM.sf2). numpy is used only here, not
-at runtime (audio.py just loads the shipped WAVs).
+Dev/build-time only. Requires the `fluidsynth` binary and the FluidR3 GM
+SoundFont (default: /usr/share/sounds/sf2/FluidR3_GM.sf2). FluidR3 is MIT
+licensed; see THIRD_PARTY_NOTICES.md. numpy is used only here, not at runtime
+(audio.py just loads the shipped WAVs).
 
 Usage:
     python tools/gen_world_music_sf2.py [--out music] [--only world3,piano_flute]
@@ -37,7 +38,7 @@ LOOP_SECONDS = 20.0          # nominal target; actual length snaps to whole bars
 TICKS_PER_BEAT = 480
 REVERB_TAIL_S = 2.2          # extra render time so the reverb tail is captured
 DEFAULT_OUT = "music"
-DEFAULT_SF2 = "/usr/share/sounds/sf2/default-GM.sf2"
+DEFAULT_SF2 = "/usr/share/sounds/sf2/FluidR3_GM.sf2"
 
 # General MIDI program numbers (0-indexed) used below.
 PIANO, CELESTA, MUSIC_BOX, VIBES, MARIMBA = 0, 8, 10, 11, 12

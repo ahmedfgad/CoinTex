@@ -1,0 +1,78 @@
+# Builds the signed Android App Bundle for the existing Google Play app.
+# The private upload key is supplied only through the protected environment;
+# the workflow produces an artifact and never commits or prints signing data.
+
+name: Build signed Android Play release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-android-release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    environment: google-play
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ccache git zip unzip autoconf automake libtool \
+            pkg-config cmake zlib1g-dev libncurses-dev libffi-dev libssl-dev
+
+      - name: Cache the Buildozer toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: ${{ runner.os }}-buildozer-2204-api36-${{ hashFiles('buildozer.spec', 'requirements-android.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-2204-api36-
+
+      - name: Install the existing Google Play upload key
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEYSTORE_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_ALIAS }}
+        run: |
+          test -n "$ANDROID_UPLOAD_KEYSTORE_BASE64" || { echo "Missing ANDROID_UPLOAD_KEYSTORE_BASE64" >&2; exit 1; }
+          test -n "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" || { echo "Missing ANDROID_UPLOAD_KEYSTORE_PASSWORD" >&2; exit 1; }
+          test -n "$ANDROID_UPLOAD_KEYSTORE_ALIAS" || { echo "Missing ANDROID_UPLOAD_KEYSTORE_ALIAS" >&2; exit 1; }
+          printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > cointex-upload.keystore
+          chmod 600 cointex-upload.keystore
+          printf 'KEYSTORE_PATH=%s/cointex-upload.keystore\nKEYSTORE_ALIAS=%s\nKEYSTORE_PASSWORD=%s\n' \
+            "$GITHUB_WORKSPACE" "$ANDROID_UPLOAD_KEYSTORE_ALIAS" "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" > .env
+          chmod 600 .env
+
+      - name: Build and validate the signed release files
+        env:
+          PIP_CONSTRAINT: ${{ github.workspace }}/android-pip-constraints.txt
+        run: ./build_android.sh
+
+      - name: Upload the signed Play bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoinTex-android-play-release
+          path: bin/*release*.aab
+          if-no-files-found: error
+          retention-days: 30

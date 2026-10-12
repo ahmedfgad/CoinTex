@@ -38,28 +38,41 @@ remain in `ios/CoinTex.xcconfig`.
 - Local validation of the SDK, bundle/version, arm64 executable, device family,
   asset catalog, privacy manifest, provisioning profile, and code signature.
 
-Apple account setup, a real-device/TestFlight test, and App Store review are
-external steps and cannot be completed before the developer membership exists.
+The Apple app record and product page are prepared. The app is not public yet.
+Apple signing, TestFlight device testing, and App Review remain before release.
 
-## 1. Create the Apple records
+## 1. Apple records already created
 
-1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/enroll/)
-   and accept the current agreements.
-2. In Certificates, Identifiers & Profiles, register an explicit App ID using
-   `coin.tex.cointexreactfast`. Confirm this identifier before the first upload;
-   App Store Connect associates uploaded builds by bundle ID and it cannot be
-   changed for that app record later.
-3. Create an **Apple Distribution** certificate and export it from Keychain as
-   a password-protected `.p12` file.
-4. Create an **App Store Connect** distribution provisioning profile for that
-   exact App ID and download the `.mobileprovision` file.
-5. In [App Store Connect](https://appstoreconnect.apple.com/), create the iOS app
-   record. Select the same bundle ID. A practical SKU is `cointex-ios-001`.
-6. If automated upload will be used, create an App Store Connect API key with
-   access to upload builds. Download its `.p8` file immediately; Apple only
-   offers that private key once.
+The App Store Connect record is permanent. Keep these identifiers for updates:
 
-## 2. Protect the signing credentials in GitHub
+- Apple Developer Team ID: `Y4Q9DBXM59`.
+- Explicit App ID / bundle ID: `coin.tex.cointexreactfast`.
+- App Store Connect Apple ID: `6822005164`; SKU: `cointex-ios-001`.
+- Version: `1.4.2`, build `10402`.
+- Distribution: public, free, all 175 countries and regions.
+- Age rating: 13+ from the completed questionnaire.
+- Product-page screenshots: eight iPhone and eight iPad images.
+- Apple Distribution certificate `AD9Z7N6FD4` expires 2027-08-28. The shared
+  certificate and App Store Connect API private key are already stored outside
+  Git under `C:\Users\ahmed\OneDrive\Secrets\apple-signing`; the API key ID is
+  `75FGUDQCLQ`. The API issuer ID is visible in App Store Connect > Users and
+  Access > Integrations > App Store Connect API.
+- CoinTex App Store profile `RJYZ59GLHP` (`CoinTex App Store Distribution`)
+  was created for this App ID and certificate and expires 2027-08-28.
+
+## 2. Create Apple signing credentials
+
+1. Use the existing Apple Distribution certificate and App Store Connect API
+   key in `C:\Users\ahmed\OneDrive\Secrets\apple-signing`. Do not create
+   duplicates or commit their private files.
+2. Download the `CoinTex App Store Distribution` profile from Certificates,
+   Identifiers & Profiles. It is app-specific and expires 2027-08-28. The
+   profile is created in Apple's portal, but its local download is still
+   outstanding.
+3. Protect these files and their passwords in encrypted storage for future
+   updates. The `.p8` file can only be downloaded once from Apple.
+
+## 3. Protect the signing credentials in GitHub
 
 Create a GitHub Actions environment named `app-store`. Add a required reviewer
 if the repository has more than one administrator, then add these environment
@@ -87,7 +100,7 @@ openssl base64 -A -in AuthKey_EXAMPLE.p8
 The workflow verifies that the profile is unexpired, is not a development or
 ad-hoc profile, belongs to the configured Team ID, and matches the bundle ID.
 
-## 3. Build, test, and upload
+## 4. Build, test, and upload
 
 1. Run **Build iOS app** first. It uses no secrets and proves that the current
    source builds with Xcode/iOS SDK 26. Download the portable Xcode project if
@@ -105,7 +118,7 @@ ad-hoc profile, belongs to the configured Team ID, and matches the bundle ID.
    for review. Increment `CURRENT_PROJECT_VERSION` for every replacement upload,
    even if the marketing version remains `1.4.2`.
 
-## 4. Complete the product page
+## 5. Complete and submit the product page
 
 Copy the prepared English metadata and screenshots from `app_store/`. The
 cross-store reference and copy-ready values are summarized in
@@ -119,10 +132,10 @@ cross-store reference and copy-ready values are summarized in
   not logged. Recheck the service policy when submitting.
 - Export compliance: the app uses standard/exempt HTTPS and no proprietary or
   non-exempt cryptography. `ITSAppUsesNonExemptEncryption` is set to `false`.
-- Age rating: disclose infrequent/mild cartoon or fantasy violence (monsters
-  can be shot, with no blood or gore) and answer all other questionnaire items
-  according to the current build. Do not select **Made for Kids** unless every
-  future version will follow Apple's Kids Category rules.
+- Age rating: the saved questionnaire yields **13+**, including frequent
+  fantasy/cartoon violence and weapons and infrequent optional contests. Review
+  each response against the submitted build. Do not select **Made for Kids**
+  unless every future version will follow Apple's Kids Category rules.
 - Review notes: use `app_store/metadata/en-US/review_notes.txt`; no demo account
   is required.
 
@@ -130,19 +143,18 @@ The privacy policy and support URLs must be publicly reachable before review.
 Push `PRIVACY.md` to the `master` branch before entering its URL in App Store
 Connect.
 
-One non-code content-rights check remains for the account holder: the melodies
-are repository-authored, but the current WAVs were rendered through the machine's
-default General MIDI SoundFont. Keep proof that the specific SoundFont permits
-commercial App Store distribution before answering Apple's content-rights
-question. If that provenance cannot be recovered, rerender the tracks with a
-SoundFont whose license is documented.
+One content-rights check remains: the melodies are repository-authored, but the
+current WAVs were rendered through a machine's default General MIDI SoundFont.
+The exact SoundFont is not recorded, so do not attest to rights in the current
+renders until the source is identified or the tracks are rerendered from a
+documented source and the required attribution is included.
 
 ## Mac availability
 
 This release targets iPhone and iPad, but not Mac Catalyst. App Store Connect can
 also offer the unmodified iOS app to users of Apple-silicon Macs. In
-**Pricing and Availability > iPhone and iPad Apps on Apple Silicon Mac**, leave
-**Make this app available** selected only after testing the TestFlight build on
+**Pricing and Availability > iPhone and iPad Apps on Apple Silicon Mac**, keep
+**Make this app available** turned off until the TestFlight build is tested on
 an Apple-silicon Mac. That version is the iPhone/iPad app running in Apple's
 compatibility environment; it is not a native macOS app and will not support
 Intel Macs.

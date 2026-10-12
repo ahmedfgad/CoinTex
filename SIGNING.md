@@ -8,6 +8,17 @@ key is kept outside this public repository and referenced by the private `.env`
 file. This document records the expected certificate and the recovery options
 if that key becomes unavailable.
 
+The owner-provided backup folder is `C:\Users\ahmed\OneDrive\CoinTex Play Console Upload Key`.
+It contains the CoinTex upload keystore, environment file, and public upload
+certificate. Keep that folder backed up and never copy its private files into Git.
+
+For signed CI builds, the manual **Build signed Android Play release** workflow
+reads `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`, and
+`ANDROID_UPLOAD_KEYSTORE_ALIAS` from the GitHub Actions `google-play`
+environment, validates the upload certificate against the fingerprint above,
+and publishes a 30-day `.aab` artifact for manual Play Console upload. Never add
+these values to repository files or workflow logs.
+
 Google Play currently expects the upload certificate with SHA-1 fingerprint
 `C6:81:B6:85:58:91:82:C4:5C:72:F6:95:71:67:A3:E8:75:AF:63:39`. The public
 CoinTex 1.4 APK and current release key use that certificate. The matching

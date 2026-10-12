@@ -6,6 +6,7 @@ Features:
 
 • 6 worlds and 60 levels
 • Responsive tap-to-move controls
+• Swipe right from the iPhone's left edge to go back from menus and the tutorial
 • Monsters, fire hazards, freeze clocks, and an auto-aiming blaster
 • Up to three stars per level based on remaining health
 • A built-in tutorial and illustrated game guide

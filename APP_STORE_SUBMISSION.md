@@ -145,11 +145,12 @@ The privacy policy and support URLs must be publicly reachable before review.
 Push `PRIVACY.md` to the `master` branch before entering its URL in App Store
 Connect.
 
-One content-rights check remains: the melodies are repository-authored, but the
-current WAVs were rendered through a machine's default General MIDI SoundFont.
-The exact SoundFont is not recorded, so do not attest to rights in the current
-renders until the source is identified or the tracks are rerendered from a
-documented source and the required attribution is included.
+The compositions are owner-authored. All seven shipped WAVs have now been
+rerendered from the explicit FluidR3 GM SoundFont using the documented Linux
+package, rather than the machine-dependent `default-GM.sf2` alias. The MIT
+copyright and license are included in the About screen and
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The App Store content-rights
+response still needs the account holder's final confirmation.
 
 The App Review contact name, phone, and email are still blank in the version
 record. Apple asks for contact details if the review team needs more

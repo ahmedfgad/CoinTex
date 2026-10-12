@@ -28,7 +28,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends fluidsynth fluid-soundfont-gm
           fluidsynth --version
-          dpkg-query -W -f='${Version}\n' fluid-soundfont-gm
+          dpkg-query -W -f='${Package} ${Version}\n' fluidsynth fluid-soundfont-gm
 
       - name: Render original compositions
         run: |

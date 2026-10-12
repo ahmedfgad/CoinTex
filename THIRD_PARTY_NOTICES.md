@@ -6,6 +6,12 @@ The game uses rendered instrument samples from the FluidR3 GM SoundFont in its
 original music. The SoundFont itself is not included in the app; the rendered
 music WAVs are. The SoundFont is distributed under the MIT License.
 
+CoinTex's original compositions were rendered with FluidSynth 2.2.5 and the
+Debian `fluid-soundfont-gm` package version 3.1-5.3 on Ubuntu 22.04. The
+rendering command uses the explicit file
+`/usr/share/sounds/sf2/FluidR3_GM.sf2`; it does not use the system default
+SoundFont alias.
+
 Copyright (c) 2000-2002, 2008 Frank Wen
 Copyright (c) 2008 Toby Smithe
 

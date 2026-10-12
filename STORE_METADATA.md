@@ -190,9 +190,10 @@ The Auto button is not a paid or online AI service. It is a deterministic, on-de
 - Age rating: 13+ from App Store Connect's current questionnaire. Responses
   include frequent fantasy/cartoon violence and weapons, no realistic violence,
   and infrequent optional head-to-head contests.
-- Content-rights declaration: pending confirmation of the exact soundfont used
-  to render the shipped music WAVs, or replacement renders from a documented
-  soundfont with its required attribution included.
+- Music: the compositions are owner-authored; the shipped WAVs use the FluidR3
+  GM SoundFont under MIT, with the full notice in the app's About screen and
+  `THIRD_PARTY_NOTICES.md`. The App Store content-rights response still needs
+  final confirmation.
 - Do not select Made for Kids unless all present and future content follows
   Apple's Kids Category requirements.
 

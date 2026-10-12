@@ -78,6 +78,10 @@ jobs:
       # needs no release signing secret. Run buildozer directly so we don't drag in the local
       # script's venv/setup bootstrapping, which CI already handles above.
       - name: Build the debug apk
+        env:
+          # Keep p4a's temporary packaging venv on pip 25.3. pip 26 currently
+          # removes an internal exception that p4a imports during recipe builds.
+          PIP_CONSTRAINT: ${{ github.workspace }}/android-pip-constraints.txt
         run: buildozer android debug
 
       - name: Locate the apk

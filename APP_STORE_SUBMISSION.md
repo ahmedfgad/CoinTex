@@ -41,10 +41,12 @@ remain in `ios/CoinTex.xcconfig`.
 The App Store Connect record and product page are prepared. Build `10402` was
 rejected by Apple's automated upload scan for a missing camera purpose string.
 The bundled framework includes optional camera APIs, although CoinTex does not
-use the camera. Build `10403` adds a clear purpose string and is the replacement
-submission. The App Privacy disclosure is published, App Review contact details
-are saved, the account is identified as a non-trader, and France is excluded.
-Final device checks and App Review remain before release.
+use the camera. Build `10403` adds a clear purpose string and was uploaded
+successfully on 2026-10-12. It is processing in App Store Connect and has not yet
+appeared in TestFlight or been submitted for App Review. The App Privacy
+disclosure is published, App Review contact details are saved, the account is
+identified as a non-trader, and France is excluded. Final device checks and App
+Review remain before release.
 
 ## 1. Apple records already created
 
@@ -53,7 +55,7 @@ The App Store Connect record is permanent. Keep these identifiers for updates:
 - Apple Developer Team ID: `Y4Q9DBXM59`.
 - Explicit App ID / bundle ID: `coin.tex.cointexreactfast`.
 - App Store Connect Apple ID: `6822005164`; SKU: `cointex-ios-001`.
-- Version: `1.4.2`, next upload build `10403` (build `10402` was rejected).
+- Version: `1.4.2`, uploaded build `10403` (build `10402` was rejected).
 - Distribution: public and free in 174 countries and regions. France is
   excluded for launch; see the encryption note below.
 - Age rating: 13+ from the completed questionnaire.
@@ -176,9 +178,11 @@ update to the existing Google Play app, not a new listing: package ID stays
 The unsigned Android CI build passed. The signed release workflow reads the
 existing Play upload key from the protected `google-play` GitHub Actions
 environment and verifies its certificate fingerprint. It normalizes the
-existing key to a standard PKCS#12 store for Android bundle signing, then
-creates an AAB artifact for manual Play Console upload. It does not publish the
-release itself.
+existing key to a standard PKCS#12 store for Android bundle signing. The signed
+build `10402` (version `1.4.2`) was submitted to Google Play production review
+on 2026-10-12. Google reports missing deobfuscation and native debug symbols as
+warnings; they do not block this release. Managed publishing is off, so Google
+will roll it out after review approval.
 
 ## Mac availability
 

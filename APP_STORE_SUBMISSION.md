@@ -42,11 +42,11 @@ The App Store Connect record and product page are prepared. Build `10402` was
 rejected by Apple's automated upload scan for a missing camera purpose string.
 The bundled framework includes optional camera APIs, although CoinTex does not
 use the camera. Build `10403` adds a clear purpose string and was uploaded
-successfully on 2026-10-12. It is processing in App Store Connect and has not yet
-appeared in TestFlight or been submitted for App Review. The App Privacy
-disclosure is published, App Review contact details are saved, the account is
-identified as a non-trader, and France is excluded. Final device checks and App
-Review remain before release.
+successfully on 2026-10-12, completed processing, and was submitted for App
+Review. App Store Connect reports **Waiting for Review**. Automatic release
+after approval is selected. The App Privacy disclosure is published, App Review
+contact details are saved, the account is identified as a non-trader, and
+France is excluded.
 
 ## 1. Apple records already created
 

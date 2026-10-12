@@ -19,8 +19,9 @@ its section below is the repository snapshot of the public listing.
 | App name | CoinTex |
 | Android package ID | `coin.tex.cointexreactfast` |
 | Apple bundle ID | `coin.tex.cointexreactfast` |
-| Marketing version | `1.4.1` |
-| Android version code / Apple build | `10401` |
+| Next marketing version | `1.4.2` |
+| Current Android version code / next Android version code | `10401` / `10402` |
+| Planned Apple marketing version / build | `1.4.2` / `10402` |
 | Developer | Ahmed Fawzy Gad |
 | Price | Free |
 | Ads | None |
@@ -75,7 +76,7 @@ Features
 • Per-world music and hand-synthesized sound effects.
 • Lightweight, runs offline. No ads, no tracking, no in-app purchases.
 
-Controls are touch-only: tap where you want to go and your character runs there, weaving past hazards on the way. From world 4, a tap on the gun button fires at the nearest monster.
+Controls are touch-only: tap where you want to go and your character runs there, weaving past hazards on the way. Swipe inward from the left edge on iPhone or from either edge on Android to return from menus. From world 4, a tap on the gun button fires at the nearest monster.
 
 Can you clear all 60 levels?
 ```

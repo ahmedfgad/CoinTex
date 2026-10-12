@@ -23,6 +23,7 @@ from kivy.graphics import Color, RoundedRectangle, Rectangle, Ellipse, Line
 from kivy.metrics import sp, dp
 from kivy.clock import Clock
 from kivy.properties import ListProperty, NumericProperty, BooleanProperty
+from kivy.utils import platform
 
 import graphics
 import levels
@@ -236,6 +237,19 @@ class InfoDialog(ModalView):
 class StyledScreen(Screen):
     # A screen with a themed gradient background drawn in code.
     theme_world = 6
+    SWIPE_BACK_ROUTES = {
+        "worldmap": "menu",
+        "levelselect": "worldmap",
+        "settings": "menu",
+        "about": "menu",
+        "privacy": "about",
+        "tutorial": "_finish",
+        "guide": "menu",
+        "autoplayer": "settings",
+        "multiplayer": "menu",
+        "mphost": "_leave",
+        "mpjoin": "_leave",
+    }
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -247,6 +261,45 @@ class StyledScreen(Screen):
 
     def build(self):
         pass
+
+    def on_touch_down(self, touch):
+        # Match platform Back gestures: iPhone/iPad swipe inward from the left
+        # edge; Android can swipe inward from either side. Let controls claim
+        # touches first and keep gameplay's full-screen tap controls intact.
+        if super().on_touch_down(touch):
+            return True
+        if self.name not in self.SWIPE_BACK_ROUTES:
+            return False
+        edge = dp(28)
+        direction = None
+        if touch.x <= edge:
+            direction = "right"
+        elif platform == "android" and touch.x >= self.width - edge:
+            direction = "left"
+        if direction is not None:
+            touch.ud["cointex_swipe_back"] = (touch.x, touch.y, direction)
+            return True
+        return False
+
+    def on_touch_move(self, touch):
+        if "cointex_swipe_back" in touch.ud:
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        origin = touch.ud.pop("cointex_swipe_back", None)
+        if origin is not None:
+            dx = touch.x - origin[0]
+            dy = abs(touch.y - origin[1])
+            inward = dx >= dp(72) if origin[2] == "right" else dx <= -dp(72)
+            if inward and dy <= max(dp(56), abs(dx) * 0.65):
+                route = self.SWIPE_BACK_ROUTES[self.name]
+                if route.startswith("_"):
+                    getattr(self, route[1:])()
+                else:
+                    app().go(route)
+            return True
+        return super().on_touch_up(touch)
 
 
 class MenuScreen(StyledScreen):

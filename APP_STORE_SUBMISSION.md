@@ -1,11 +1,23 @@
 # Publishing CoinTex on Apple's App Store
 
 The repository is configured for a universal iPhone and iPad App Store release with bundle ID
-`coin.tex.cointexreactfast`, marketing version `1.4.1`, build `10401`, minimum
+`coin.tex.cointexreactfast`, marketing version `1.4.2`, build `10402`, minimum
 iOS 15, and the iOS 26 SDK. Release identity and version values live in
 [`ios/CoinTex.xcconfig`](ios/CoinTex.xcconfig).
 
 No certificate, provisioning profile, API key, or password belongs in Git.
+
+## Keep release credentials for future updates
+
+Create a password-manager record named **CoinTex App Store release** and store
+the Apple Team ID, API key ID and issuer ID there. Back up the Apple
+Distribution `.p12` and its password, the App Store provisioning profile, and
+the API private-key `.p8` in encrypted storage with that record. Apple offers
+the `.p8` private key only once. Keep the certificate and profile expiration
+dates and the GitHub repository's `app-store` environment name with the record.
+Add the values to GitHub Actions environment secrets only; never commit them or
+put them in a release artifact. The app identity and future build-number source
+remain in `ios/CoinTex.xcconfig`.
 
 ## What the repository now provides
 
@@ -20,6 +32,9 @@ No certificate, provisioning profile, API key, or password belongs in Git.
   Local Network purpose text, export-compliance declaration, and privacy
   manifest generated into the Xcode project.
 - An in-app Privacy Policy screen and the public policy in `PRIVACY.md`.
+- iPhone/iPad left-edge swipe-right Back navigation on menu and tutorial
+  screens. Android accepts inward swipes from either edge. Visible Back buttons
+  remain available on both platforms.
 - Local validation of the SDK, bundle/version, arm64 executable, device family,
   asset catalog, privacy manifest, provisioning profile, and code signature.
 
@@ -88,7 +103,7 @@ ad-hoc profile, belongs to the configured Team ID, and matches the bundle ID.
    it to internal TestFlight testers.
 5. Complete a TestFlight pass on the exact uploaded build before selecting it
    for review. Increment `CURRENT_PROJECT_VERSION` for every replacement upload,
-   even if the marketing version remains `1.4.1`.
+   even if the marketing version remains `1.4.2`.
 
 ## 4. Complete the product page
 

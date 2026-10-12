@@ -20,8 +20,8 @@ source.include_exts = py,png,wav
 # version (needs pygad and numpy). audio_alternatives and tools are dev only.
 source.exclude_dirs = bin, dist, build, venv, .venv, .buildozer, .git, __pycache__, tests, PlayerGA, audio_alternatives, tools, music/originals, sprite_preview, cointex_media, app_store, ios, android
 
-# Version shown to users. This patch release updates the Android target SDK.
-version = 1.4.1
+# Version shown to users. This patch release adds edge-swipe Back navigation.
+version = 1.4.2
 
 # Networking uses the standard library. certifi supplies a verified CA bundle
 # for the optional public-IP HTTPS lookup on mobile.
@@ -76,7 +76,7 @@ android.release_artifact = aab
 # Version code. It must be higher than the version code already on Google Play,
 # or the upload is rejected. Check the current value in Play Console under
 # Release, App bundle explorer.
-android.numeric_version = 10401
+android.numeric_version = 10402
 
 # Background color of the splash screen.
 android.presplash_color = #000000

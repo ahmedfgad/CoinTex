@@ -1,8 +1,13 @@
-# CoinTex 1.4.1
+# CoinTex 1.4.2
 
 CoinTex is a top-down arcade game written entirely in Python with [Kivy](https://kivy.org). Move your character around each level to collect all the coins before the timer runs out, while dodging monsters and fire and shooting your way through. The same Python codebase runs on Windows, macOS, Linux, Android, iPhone and iPad, and every screen and all of the graphics are drawn in code.
 
-This patch release updates the Android packaging configuration for Google Play's Android 16 requirement, prepares the iPhone/iPad App Store release path, and includes a cross-platform usability and reliability pass.
+This patch release adds a familiar edge-swipe Back gesture on touch devices and corrects the first store screenshot so it shows the main menu.
+
+## What's new in 1.4.2
+
+- Swipe inward from the left edge on iPhone/iPad or from either edge on Android to go back from menus and the tutorial. Visible Back buttons and Android's system Back remain available.
+- The first Google Play and App Store screenshot now shows CoinTex's main menu instead of the first tutorial step.
 
 ## What's new in 1.4.1
 

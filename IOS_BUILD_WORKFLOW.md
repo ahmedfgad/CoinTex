@@ -19,8 +19,8 @@ active. Apple has required iOS uploads to use that SDK generation since April
 The single source of truth is `ios/CoinTex.xcconfig`:
 
 - Bundle ID: `coin.tex.cointexreactfast`
-- Marketing version: `1.4.1`
-- Build number: `10401`
+- Marketing version: `1.4.2`
+- Build number: `10402`
 - Minimum version: iOS 15
 - Device family: iPhone and iPad
 

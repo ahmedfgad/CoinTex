@@ -5,7 +5,7 @@ store listings. It records the live Google Play listing and the prepared Apple
 App Store listing in one place so names, descriptions, privacy answers and
 visual assets do not drift between releases.
 
-Last reviewed: August 28, 2026.
+Last reviewed: October 12, 2026.
 
 The individual files under `app_store/metadata/en-US/` remain the copy-ready
 source for App Store Connect. Update those files and this document together.
@@ -52,6 +52,11 @@ The page reported that the listing was last updated on May 29, 2026.
 
 The short description has one character of spare capacity. Recount it before
 editing in Play Console.
+
+The Android edge-back navigation change is an update to this same Play listing,
+with numeric version code `10402`; it does not require a second app record.
+The unsigned Android CI build passed. A signed AAB and Play Console upload are
+still pending.
 
 ### Full description
 

@@ -39,7 +39,9 @@ remain in `ios/CoinTex.xcconfig`.
   asset catalog, privacy manifest, provisioning profile, and code signature.
 
 The Apple app record and product page are prepared. The app is not public yet.
-Apple signing, TestFlight device testing, and App Review remain before release.
+The App Privacy response is saved as a draft but still needs its publish
+attestation. App Review contact details, a signed build, device testing, and
+App Review remain before release.
 
 ## 1. Apple records already created
 
@@ -148,6 +150,26 @@ current WAVs were rendered through a machine's default General MIDI SoundFont.
 The exact SoundFont is not recorded, so do not attest to rights in the current
 renders until the source is identified or the tracks are rerendered from a
 documented source and the required attribution is included.
+
+The App Review contact name, phone, and email are still blank in the version
+record. Apple asks for contact details if the review team needs more
+information; provide a reachable international-format phone number before
+submission.
+
+The signing workflow is ready, but its `app-store` GitHub Actions environment
+does not yet have CoinTex signing credentials. Do not put keys in this
+repository. The CoinTex profile exists in Apple's portal, but Chrome blocked its
+download, so its local `.mobileprovision` file is not available for the build.
+
+## Android update
+
+The iPhone-style edge-back navigation is also enabled on Android. This is an
+update to the existing Google Play app, not a new listing: package ID stays
+`coin.tex.cointexreactfast`, and buildozer numeric version code is `10402`.
+The unsigned Android CI build passed. The signed release workflow is ready but
+needs the existing Play upload key configured in its protected `google-play`
+GitHub Actions environment. It creates an AAB artifact for manual Play Console
+upload; it does not publish the release itself.
 
 ## Mac availability
 

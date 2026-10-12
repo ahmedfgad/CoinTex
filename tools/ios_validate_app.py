@@ -60,6 +60,8 @@ def main() -> None:
         fail("iPhone orientations must be landscape-only")
     if set(info.get("UISupportedInterfaceOrientations~ipad", [])) != landscape:
         fail("iPad orientations must be landscape-only")
+    if info.get("UIRequiresFullScreen") is not True:
+        fail("landscape-only iPad builds must opt out of multitasking")
     ipad_icon_files = set(
         info.get("CFBundleIcons~ipad", {})
         .get("CFBundlePrimaryIcon", {})

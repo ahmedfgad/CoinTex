@@ -50,6 +50,9 @@ def configure_plist(plist_path: Path, settings: dict[str, str]) -> None:
         "UILaunchStoryboardName": "Launch Screen",
         "UIRequiredDeviceCapabilities": ["arm64"],
         "UIStatusBarHidden": True,
+        # CoinTex is a landscape-only game. Opt out of iPad multitasking and
+        # dynamic resizing so iPadOS does not require unsupported orientations.
+        "UIRequiresFullScreen": True,
         "UISupportedInterfaceOrientations": landscape_orientations,
         "UISupportedInterfaceOrientations~ipad": landscape_orientations,
     })

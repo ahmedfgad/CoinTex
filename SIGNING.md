@@ -13,8 +13,8 @@ It contains the CoinTex upload keystore, environment file, and public upload
 certificate. Keep that folder backed up and never copy its private files into Git.
 
 For signed CI builds, the manual **Build signed Android Play release** workflow
-reads `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`, and
-`ANDROID_UPLOAD_KEYSTORE_ALIAS` from the GitHub Actions `google-play`
+reads `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
+`ANDROID_UPLOAD_KEY_PASSWORD`, and `ANDROID_UPLOAD_KEYSTORE_ALIAS` from the GitHub Actions `google-play`
 environment, validates the upload certificate against the fingerprint above,
 and publishes a 30-day `.aab` artifact for manual Play Console upload. Never add
 these values to repository files or workflow logs.

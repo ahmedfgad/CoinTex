@@ -95,6 +95,7 @@ fi
 # shellcheck disable=SC1091
 source "$ENV_FILE"
 KEYSTORE_FILE="${KEYSTORE_PATH:-$KEYSTORE_FILE}"
+KEYSTORE_KEY_PASSWORD="${KEYSTORE_KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
 
 if [[ ! -f "$KEYSTORE_FILE" ]]; then
     echo "Creating the upload keystore: $KEYSTORE_FILE"
@@ -102,7 +103,7 @@ if [[ ! -f "$KEYSTORE_FILE" ]]; then
         -keystore "$KEYSTORE_FILE" \
         -alias "$KEYSTORE_ALIAS" \
         -keyalg RSA -keysize 2048 -validity 10000 \
-        -storepass "$KEYSTORE_PASSWORD" -keypass "$KEYSTORE_PASSWORD" \
+        -storepass "$KEYSTORE_PASSWORD" -keypass "$KEYSTORE_KEY_PASSWORD" \
         -dname "CN=Ahmed Gad, OU=CoinTex, O=CoinTex, L=Unknown, ST=Unknown, C=US"
 
     echo "Back up cointex-upload.keystore and .env now. Without them you cannot"
@@ -137,12 +138,13 @@ if [[ "$ACTUAL_UPLOAD_SHA1" != "$EXPECTED_UPLOAD_SHA1" ]]; then
 fi
 echo "Verified the Google Play upload certificate: $ACTUAL_UPLOAD_SHA1"
 
-# Pass the keystore to python-for-android. The key password is the same as the
-# store password because the keystore is in PKCS12 format.
+# Pass the keystore and both passwords to python-for-android. Existing JKS
+# uploads can use distinct store and key passwords; modern PKCS12 files usually
+# use one password for both.
 export P4A_RELEASE_KEYSTORE="$KEYSTORE_FILE"
 export P4A_RELEASE_KEYSTORE_PASSWD="$KEYSTORE_PASSWORD"
 export P4A_RELEASE_KEYALIAS="$KEYSTORE_ALIAS"
-export P4A_RELEASE_KEYALIAS_PASSWD="$KEYSTORE_PASSWORD"
+export P4A_RELEASE_KEYALIAS_PASSWD="$KEYSTORE_KEY_PASSWORD"
 
 # python-for-android builds one file type per run, so build the aab and the apk
 # in two passes. Always leave buildozer.spec set back to aab when done.

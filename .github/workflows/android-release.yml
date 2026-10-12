@@ -53,15 +53,21 @@ jobs:
         env:
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           ANDROID_UPLOAD_KEYSTORE_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_ALIAS }}
         run: |
           test -n "$ANDROID_UPLOAD_KEYSTORE_BASE64" || { echo "Missing ANDROID_UPLOAD_KEYSTORE_BASE64" >&2; exit 1; }
           test -n "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" || { echo "Missing ANDROID_UPLOAD_KEYSTORE_PASSWORD" >&2; exit 1; }
+          test -n "$ANDROID_UPLOAD_KEY_PASSWORD" || { echo "Missing ANDROID_UPLOAD_KEY_PASSWORD" >&2; exit 1; }
           test -n "$ANDROID_UPLOAD_KEYSTORE_ALIAS" || { echo "Missing ANDROID_UPLOAD_KEYSTORE_ALIAS" >&2; exit 1; }
           printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > cointex-upload.keystore
           chmod 600 cointex-upload.keystore
-          printf 'KEYSTORE_PATH=%s/cointex-upload.keystore\nKEYSTORE_ALIAS=%s\nKEYSTORE_PASSWORD=%s\n' \
-            "$GITHUB_WORKSPACE" "$ANDROID_UPLOAD_KEYSTORE_ALIAS" "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" > .env
+          {
+            printf 'KEYSTORE_PATH=%q\n' "$GITHUB_WORKSPACE/cointex-upload.keystore"
+            printf 'KEYSTORE_ALIAS=%q\n' "$ANDROID_UPLOAD_KEYSTORE_ALIAS"
+            printf 'KEYSTORE_PASSWORD=%q\n' "$ANDROID_UPLOAD_KEYSTORE_PASSWORD"
+            printf 'KEYSTORE_KEY_PASSWORD=%q\n' "$ANDROID_UPLOAD_KEY_PASSWORD"
+          } > .env
           chmod 600 .env
 
       - name: Build and validate the signed release files

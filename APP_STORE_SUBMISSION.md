@@ -152,10 +152,15 @@ copyright and license are included in the About screen and
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The App Store content-rights
 response still needs the account holder's final confirmation.
 
-The App Review contact name, phone, and email are still blank in the version
-record. Apple asks for contact details if the review team needs more
-information; provide a reachable international-format phone number before
-submission.
+The App Review contact name and email are saved as `Ahmed Fawzy Gad` and the
+public developer email. The phone field remains blank. Provide a reachable
+international-format phone number before submission.
+
+The App Store Connect account also shows Digital Services Act setup as
+incomplete. The account holder must self-assess and declare trader status.
+Apple says a trader's address, phone, and email are displayed on the product
+page in EU countries, so do not choose a status or enter a public address on the
+owner's behalf.
 
 The signing workflow is ready, but its `app-store` GitHub Actions environment
 does not yet have CoinTex signing credentials. Do not put keys in this

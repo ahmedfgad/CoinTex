@@ -46,6 +46,11 @@ def configure_plist(plist_path: Path, settings: dict[str, str]) -> None:
         "NSLocalNetworkUsageDescription": (
             "CoinTex uses the local network to play with a nearby device."
         ),
+        "NSCameraUsageDescription": (
+            "CoinTex does not use the camera. Its bundled game framework "
+            "includes optional camera APIs, but the app never requests "
+            "access or captures images or video."
+        ),
         "UIApplicationSupportsIndirectInputEvents": True,
         "UILaunchStoryboardName": "Launch Screen",
         "UIRequiredDeviceCapabilities": ["arm64"],

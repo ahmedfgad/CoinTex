@@ -75,6 +75,8 @@ def main() -> None:
         fail("ITSAppUsesNonExemptEncryption must be false")
     if not info.get("NSLocalNetworkUsageDescription"):
         fail("local-network purpose text is missing")
+    if not info.get("NSCameraUsageDescription"):
+        fail("camera purpose text for the bundled framework is missing")
     if info.get("NSAppTransportSecurity", {}).get("NSAllowsArbitraryLoads"):
         fail("arbitrary network loads must not be enabled")
     if not str(info.get("DTSDKName", "")).startswith("iphoneos26"):

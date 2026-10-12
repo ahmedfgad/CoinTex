@@ -81,11 +81,26 @@ jobs:
             exit 1
           fi
           rm -f "$RUNNER_TEMP/cointex-key-check.csr"
+          # Normalize legacy JKS/PKCS12 key stores to PKCS12 using a single
+          # password. Android's bundle signer does not reliably handle an
+          # entry password that differs from the PKCS12 store password.
+          keytool -importkeystore \
+            -srckeystore cointex-upload.keystore \
+            -srcstorepass "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            -srcalias "$ANDROID_UPLOAD_KEYSTORE_ALIAS" \
+            -srckeypass "$KEY_PASSWORD" \
+            -destkeystore cointex-upload-normalized.p12 \
+            -deststoretype PKCS12 \
+            -deststorepass "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            -destkeypass "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            -destalias "$ANDROID_UPLOAD_KEYSTORE_ALIAS" \
+            -noprompt >/dev/null
+          mv cointex-upload-normalized.p12 cointex-upload.keystore
           {
             printf 'KEYSTORE_PATH=%q\n' "$GITHUB_WORKSPACE/cointex-upload.keystore"
             printf 'KEYSTORE_ALIAS=%q\n' "$ANDROID_UPLOAD_KEYSTORE_ALIAS"
             printf 'KEYSTORE_PASSWORD=%q\n' "$ANDROID_UPLOAD_KEYSTORE_PASSWORD"
-            printf 'KEYSTORE_KEY_PASSWORD=%q\n' "$KEY_PASSWORD"
+            printf 'KEYSTORE_KEY_PASSWORD=%q\n' "$ANDROID_UPLOAD_KEYSTORE_PASSWORD"
           } > .env
           chmod 600 .env
 

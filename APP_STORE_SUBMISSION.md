@@ -1,7 +1,7 @@
 # Publishing CoinTex on Apple's App Store
 
 The repository is configured for a universal iPhone and iPad App Store release with bundle ID
-`coin.tex.cointexreactfast`, marketing version `1.4.2`, build `10402`, minimum
+`coin.tex.cointexreactfast`, marketing version `1.4.2`, build `10403`, minimum
 iOS 15, and the iOS 26 SDK. Release identity and version values live in
 [`ios/CoinTex.xcconfig`](ios/CoinTex.xcconfig).
 
@@ -38,10 +38,13 @@ remain in `ios/CoinTex.xcconfig`.
 - Local validation of the SDK, bundle/version, arm64 executable, device family,
   asset catalog, privacy manifest, provisioning profile, and code signature.
 
-The Apple app record and product page are prepared. The app is not public yet.
-The App Privacy response is saved as a draft but still needs its publish
-attestation. App Review contact details, a signed build, device testing, and
-App Review remain before release.
+The App Store Connect record and product page are prepared. Build `10402` was
+rejected by Apple's automated upload scan for a missing camera purpose string.
+The bundled framework includes optional camera APIs, although CoinTex does not
+use the camera. Build `10403` adds a clear purpose string and is the replacement
+submission. The App Privacy disclosure is published, App Review contact details
+are saved, the account is identified as a non-trader, and France is excluded.
+Final device checks and App Review remain before release.
 
 ## 1. Apple records already created
 
@@ -50,8 +53,9 @@ The App Store Connect record is permanent. Keep these identifiers for updates:
 - Apple Developer Team ID: `Y4Q9DBXM59`.
 - Explicit App ID / bundle ID: `coin.tex.cointexreactfast`.
 - App Store Connect Apple ID: `6822005164`; SKU: `cointex-ios-001`.
-- Version: `1.4.2`, build `10402`.
-- Distribution: public, free, all 175 countries and regions.
+- Version: `1.4.2`, next upload build `10403` (build `10402` was rejected).
+- Distribution: public and free in 174 countries and regions. France is
+  excluded for launch; see the encryption note below.
 - Age rating: 13+ from the completed questionnaire.
 - Product-page screenshots: eight iPhone and eight iPad images.
 - Apple Distribution certificate `AD9Z7N6FD4` expires 2027-08-28. The shared
@@ -62,23 +66,20 @@ The App Store Connect record is permanent. Keep these identifiers for updates:
 - CoinTex App Store profile `RJYZ59GLHP` (`CoinTex App Store Distribution`)
   was created for this App ID and certificate and expires 2027-08-28.
 
-## 2. Create Apple signing credentials
+## 2. Apple signing credentials
 
 1. Use the existing Apple Distribution certificate and App Store Connect API
    key in `C:\Users\ahmed\OneDrive\Secrets\apple-signing`. Do not create
    duplicates or commit their private files.
-2. Download the `CoinTex App Store Distribution` profile from Certificates,
-   Identifiers & Profiles. It is app-specific and expires 2027-08-28. The
-   profile is created in Apple's portal, but its local download is still
-   outstanding.
+2. The `CoinTex App Store Distribution` profile is downloaded locally and is
+   app-specific. It expires 2027-08-28.
 3. Protect these files and their passwords in encrypted storage for future
    updates. The `.p8` file can only be downloaded once from Apple.
 
 ## 3. Protect the signing credentials in GitHub
 
-Create a GitHub Actions environment named `app-store`. Add a required reviewer
-if the repository has more than one administrator, then add these environment
-secrets:
+The GitHub Actions environment `app-store` and its signing secrets are already
+configured. Keep these exact names when rotating or restoring them:
 
 | Secret | Value |
 | --- | --- |
@@ -132,8 +133,12 @@ cross-store reference and copy-ready values are summarized in
 - App Privacy: no data collected or used for tracking. The public-IP request is
   made only when Host Game is opened; ipify states that visitor information is
   not logged. Recheck the service policy when submitting.
-- Export compliance: the app uses standard/exempt HTTPS and no proprietary or
-  non-exempt cryptography. `ITSAppUsesNonExemptEncryption` is set to `false`.
+- Export compliance: the optional public-IP lookup uses Python's TLS/SSL
+  implementation for HTTPS to `api.ipify.org`. France is excluded from the
+  initial 174-region release because Apple requires a French encryption
+  declaration for standard encryption implemented outside Apple's operating
+  system when distributing in France. Keep `ITSAppUsesNonExemptEncryption`
+  aligned with Apple's export-compliance questionnaire and the final bundle.
 - Age rating: the saved questionnaire yields **13+**, including frequent
   fantasy/cartoon violence and weapons and infrequent optional contests. Review
   each response against the submitted build. Do not select **Made for Kids**
@@ -150,32 +155,30 @@ rerendered from the explicit FluidR3 GM SoundFont using the documented Linux
 package, rather than the machine-dependent `default-GM.sf2` alias. The MIT
 copyright and license are included in the About screen and
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The App Store content-rights
-response still needs the account holder's final confirmation.
+response is saved as “Yes, this app has the necessary rights to its third-party
+content.”
 
-The App Review contact name and email are saved as `Ahmed Fawzy Gad` and the
-public developer email. The phone field remains blank. Provide a reachable
-international-format phone number before submission.
+The App Review contact name, public developer email, and international-format
+phone number are saved.
 
-The App Store Connect account also shows Digital Services Act setup as
-incomplete. The account holder must self-assess and declare trader status.
-Apple says a trader's address, phone, and email are displayed on the product
-page in EU countries, so do not choose a status or enter a public address on the
-owner's behalf.
+The account holder identified as a non-trader under the Digital Services Act.
 
-The signing workflow is ready, but its `app-store` GitHub Actions environment
-does not yet have CoinTex signing credentials. Do not put keys in this
-repository. The CoinTex profile exists in Apple's portal, but Chrome blocked its
-download, so its local `.mobileprovision` file is not available for the build.
+The `app-store` GitHub Actions environment contains the required signing and
+App Store Connect API secrets. Keep their source files in encrypted backups;
+never commit them. `UIRequiresFullScreen` is enabled for the landscape-only iPad
+game so it does not advertise iPad multitasking layouts it cannot render.
 
 ## Android update
 
 The iPhone-style edge-back navigation is also enabled on Android. This is an
 update to the existing Google Play app, not a new listing: package ID stays
 `coin.tex.cointexreactfast`, and buildozer numeric version code is `10402`.
-The unsigned Android CI build passed. The signed release workflow is ready but
-needs the existing Play upload key configured in its protected `google-play`
-GitHub Actions environment. It creates an AAB artifact for manual Play Console
-upload; it does not publish the release itself.
+The unsigned Android CI build passed. The signed release workflow reads the
+existing Play upload key from the protected `google-play` GitHub Actions
+environment and verifies its certificate fingerprint. It normalizes the
+existing key to a standard PKCS#12 store for Android bundle signing, then
+creates an AAB artifact for manual Play Console upload. It does not publish the
+release itself.
 
 ## Mac availability
 

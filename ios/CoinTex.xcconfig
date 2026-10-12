@@ -9,7 +9,7 @@ APP_DISPLAY_NAME = CoinTex
 PRODUCT_NAME = CoinTex
 PRODUCT_BUNDLE_IDENTIFIER = coin.tex.cointexreactfast
 MARKETING_VERSION = 1.4.2
-CURRENT_PROJECT_VERSION = 10402
+CURRENT_PROJECT_VERSION = 10403
 IPHONEOS_DEPLOYMENT_TARGET = 15.0
 
 // Ship one adaptive iOS app for both iPhone and iPad. App Store Connect can

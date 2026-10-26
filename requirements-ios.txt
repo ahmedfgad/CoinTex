@@ -9,4 +9,4 @@ sh==2.2.4
 
 # Installed into the packaged Python distribution with `toolchain pip`; this
 # pin is also read by the local and GitHub Actions build scripts.
-certifi==2026.7.22
+certifi==2026.10.19
